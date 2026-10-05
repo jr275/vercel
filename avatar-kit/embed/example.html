@@ -1,0 +1,19 @@
+<!doctype html>
+<!-- Plain HTML example. Serve this folder over http (not file://), e.g. `npx serve embed`, then open /example.html -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Executive avatar</title>
+<style>html,body{margin:0;height:100%;background:#0b0b0e}#stage{position:fixed;inset:0}button{position:fixed;left:16px;bottom:16px;padding:8px 14px}</style>
+<div id="stage"></div>
+<button id="demo">Run demo</button>
+<script src="vendor/three.min.js"></script>
+<script src="vendor/loaders/GLTFLoader.js"></script>
+<script src="vendor/libs/meshopt_decoder.js"></script>
+<script src="avatar-kit.js"></script>
+<script>
+  AvatarKit.KTX2_PATH = 'vendor/libs/basis/';
+  // No asset: the built-in DEVELOPMENT_PLACEHOLDER. For a character: asset: { url: 'vera.glb', role: 'PRODUCTION' }
+  const avatar = AvatarKit.createExecutiveAvatar(document.getElementById('stage'), { speech: 'auto' });
+  avatar.on('state', s => console.log('state', s.state));
+  document.getElementById('demo').onclick = () => avatar.runDemo();
+</script>

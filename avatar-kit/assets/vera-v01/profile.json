@@ -1,0 +1,34 @@
+{
+  "id": "vera-v01",
+  "role": "VISUAL_PROTOTYPE",
+  "note": "Data for the CC0 MPFB base (see SOURCE.md): landmark override (the head-height estimate from the eye bones is 40% too large for this body), colours and roughness. Remove it and the base looks like the original sample.",
+  "materials": {
+    "Human.female_casualsuit01": {
+      "color": "#050506",
+      "map": null,
+      "roughness": 1,
+      "metalness": 0,
+      "type": "lambert"
+    },
+    "Human.ponytail01": {
+      "color": "#3c3234",
+      "roughness": 0.6
+    },
+    "Human.body": {
+      "color": "#d8c0b2",
+      "roughness": 0.6
+    },
+    "Human.mindfront_eyebrows_02": {
+      "color": "#1c1614"
+    }
+  },
+  "rigMap": {
+    "options": {
+      "landmarks": {
+        "headHeight": 0.91,
+        "headCenterY": 6.6,
+        "chinY": 6.14
+      }
+    }
+  }
+}

@@ -1,0 +1,440 @@
+<title>Avatar Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;600&family=Figtree:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --bg: #0c0c10; --panel: #14141a; --line: #2a2a33; --ink: #f1eef2; --muted: #9d98a6; --chip: #1c1c24;
+    --accent: #e8907c; --accent-ink: #1b0e0a; --ok: #7fd1a1; --warn: #e6c36a; --bad: #ef7d7d;
+    --display: 'Familjen Grotesk', 'Helvetica Neue', Arial, sans-serif; --body: 'Figtree', system-ui, sans-serif; --mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { background: var(--bg); margin: 0; }
+  body { color: var(--ink); font-family: var(--body); font-size: 14px; line-height: 1.45; padding: 16px; }
+  .wrap { max-width: 1280px; margin: 0 auto; display: grid; gap: 14px; }
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 6px 16px; flex-wrap: wrap; }
+  h1 { font-family: var(--display); font-weight: 600; font-size: clamp(22px, 4vw, 30px); margin: 0; letter-spacing: -0.01em; }
+  .tag { color: var(--muted); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; }
+  .layout { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(300px, 0.75fr); gap: 16px; align-items: start; }
+  @media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+
+  #stage { position: relative; height: clamp(460px, 80vh, 860px); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: #000; }
+  #stage canvas { cursor: grab; } #stage canvas:active { cursor: grabbing; }
+  .hud { position: absolute; z-index: 2; left: 12px; top: 12px; display: flex; flex-wrap: wrap; gap: 6px; max-width: calc(100% - 24px); pointer-events: none; }
+  .hud span { font-family: var(--mono); font-size: 11.5px; padding: 3px 8px; border-radius: 6px; background: rgba(12, 12, 16, 0.72); border: 1px solid rgba(255, 255, 255, 0.08); color: #d8d4de; }
+  .hud b { color: var(--accent); font-weight: 500; }
+  .banner { position: absolute; z-index: 3; left: 12px; right: 12px; bottom: 12px; padding: 9px 12px; border-radius: 10px; font-size: 13px; background: rgba(12, 12, 16, 0.86); border: 1px solid var(--line); }
+  .banner[hidden] { display: none; } .banner.warn { border-color: var(--warn); } .banner.err { border-color: var(--bad); }
+  body.clean .panel, body.clean .hud, body.clean header, body.clean .below, body.clean .banner { display: none; }
+  body.clean .layout { grid-template-columns: minmax(0, 1fr); } body.clean #stage { height: calc(100vh - 32px); }
+  #exitClean { position: absolute; z-index: 4; right: 12px; top: 12px; display: none; opacity: 0.35; } #exitClean:hover { opacity: 1; } body.clean #exitClean { display: block; }
+
+  .panel { display: grid; gap: 14px; min-width: 0; }
+  .block { display: grid; gap: 7px; min-width: 0; }
+  h2 { margin: 0; font-size: 11.5px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  .row { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+  button, .filebtn { font: inherit; font-size: 13px; font-weight: 500; color: var(--ink); background: var(--chip); border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; cursor: pointer; transition: background 0.15s, border-color 0.15s; }
+  button:hover, .filebtn:hover { border-color: var(--muted); }
+  button:focus-visible, .filebtn:focus-within, select:focus-visible, textarea:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  button:disabled { opacity: 0.45; cursor: default; }
+  .filebtn { position: relative; display: inline-block; } .filebtn input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+  .status { min-height: 1.3em; font-size: 12.5px; color: var(--muted); margin: 0; }
+  label.range { display: grid; gap: 4px; font-size: 12.5px; color: var(--muted); } input[type=range] { width: 100%; accent-color: var(--accent); }
+  select, textarea { font: inherit; font-size: 12.5px; color: var(--ink); background: var(--chip); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; width: 100%; }
+  textarea { font-family: var(--mono); font-size: 11.5px; min-height: 84px; resize: vertical; }
+  .below { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; } @media (max-width: 900px) { .below { grid-template-columns: minmax(0, 1fr); } }
+  .card { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 12px 14px; min-width: 0; display: grid; gap: 8px; align-content: start; }
+  table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 11.5px; } td { padding: 2px 0; border-bottom: 1px solid #1f1f27; } td:last-child { text-align: right; color: #d8d4de; } td:first-child { color: var(--muted); }
+  .grade { font-family: var(--mono); font-size: 12px; } .grade.full, .grade.good { color: var(--ok); } .grade.basic, .grade.bones-only { color: var(--warn); } .grade.insufficient, .grade.fallback { color: var(--bad); }
+  #log { font-family: var(--mono); font-size: 11.5px; max-height: 190px; overflow: auto; margin: 0; padding: 0; list-style: none; display: grid; gap: 2px; color: #cfcad6; } #log .e { color: var(--bad); } #log .w { color: var(--warn); }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; } .chips i { font-style: normal; font-family: var(--mono); font-size: 11px; background: var(--chip); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; color: var(--muted); } .chips i.has { color: var(--ok); border-color: #2c4a3a; }
+  details { border: 1px solid var(--line); border-radius: 10px; background: var(--chip); } summary { cursor: pointer; padding: 8px 12px; font-weight: 500; font-size: 13px; }
+  details > div { padding: 0 12px 12px; display: grid; gap: 8px; }
+
+  /* asset validation */
+  .val { border: 1px solid var(--line); border-radius: 14px; background: var(--panel); padding: 16px; display: grid; gap: 14px; min-width: 0; }
+  .val h2.big { font-family: var(--display); font-size: 20px; text-transform: none; letter-spacing: 0; color: var(--ink); font-weight: 600; }
+  .valtop { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 16px; } @media (max-width: 900px) { .valtop { grid-template-columns: minmax(0, 1fr); } }
+  .score { display: grid; gap: 8px; align-content: start; }
+  .score .n { font-family: var(--display); font-size: 56px; line-height: 1; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .score .n small { font-size: 18px; color: var(--muted); font-weight: 500; }
+  .pill { display: inline-block; font-family: var(--mono); font-size: 12px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line); width: fit-content; }
+  .pill.ACEITAR { color: var(--ok); border-color: var(--ok); } .pill.REVISAR, .pill.PENDENTE { color: var(--warn); border-color: var(--warn); } .pill.REJEITAR { color: var(--bad); border-color: var(--bad); }
+  .gates { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; font-size: 12.5px; } .gates li::before { content: '\2713  '; color: var(--ok); } .gates li.unk::before { content: '?  '; color: var(--warn); } .gates li.unk { color: var(--muted); } .gates li.fail { color: var(--bad); } .gates li.fail::before { content: '\2717  '; color: var(--bad); }
+  .bar { height: 6px; border-radius: 3px; background: #23232c; overflow: hidden; } .bar i { display: block; height: 100%; background: var(--accent); }
+  .tablewrap { overflow-x: auto; } .val table td, .val table th { padding: 3px 8px 3px 0; text-align: left; white-space: nowrap; border-bottom: 1px solid #1f1f27; } .val th { color: var(--muted); font-weight: 500; font-size: 11px; }
+  .val table td:last-child { text-align: left; color: inherit; } .ok { color: var(--ok); } .no { color: var(--bad); } .mid { color: var(--warn); }
+  .rubric { display: grid; gap: 8px; } .rubric label { display: grid; grid-template-columns: minmax(0, 1fr) 150px 28px; gap: 10px; align-items: center; font-size: 12.5px; color: #cfcad6; } @media (max-width: 600px) { .rubric label { grid-template-columns: minmax(0, 1fr); } }
+  .rubric .cat { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-top: 6px; }
+  .val details > div { overflow-x: auto; } .val pre { margin: 0; font-family: var(--mono); font-size: 11px; max-height: 220px; overflow: auto; }
+  @media (prefers-reduced-motion: reduce) { button { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header><h1>Avatar Lab</h1><span class="tag">Presentation layer · procedural fallback ↔ GLB premium</span></header>
+  <div class="layout">
+    <div id="stage">
+      <div class="hud" id="hud"></div>
+      <button type="button" id="exitClean">Sair do modo limpo (Esc)</button>
+      <div class="banner" id="banner" hidden role="status"></div>
+    </div>
+    <div class="panel">
+      <div class="block"><h2>Model</h2>
+        <div class="row">
+          <button type="button" data-model="procedural" aria-pressed="true">Procedural (fallback)</button>
+          <label class="filebtn">Carregar GLB<input type="file" id="glbFile" accept=".glb,.gltf,model/gltf-binary"></label>
+          <button type="button" id="demoGlb" title="Gera no navegador um GLB de teste com rig completo">GLB de teste</button>
+        </div>
+        <details><summary>RigMap (JSON, opcional)</summary><div>
+          <textarea id="rigmap" spellcheck="false" placeholder='{ "preset": "arkit", "options": { "ignoreTokens": ["fc"], "swapLeftRight": false } }'></textarea>
+          <p class="status">Aplicado ao próximo GLB carregado. Nenhum nome é presumido: o relatório mostra o que foi encontrado.</p></div></details>
+        <p class="status" id="modelStatus" role="status"></p>
+      </div>
+      <div class="block"><h2>Expressions</h2><div class="row" id="exprRow" role="group" aria-label="Expressions"></div></div>
+      <div class="block"><h2>Cognitive State</h2><div class="row" id="cogRow" role="group" aria-label="Cognitive State"></div></div>
+      <div class="block"><h2>Camera</h2>
+        <div class="row" role="group" aria-label="Shot" id="shotRow"></div>
+        <div class="row" role="group" aria-label="Style" id="styleRow"></div></div>
+      <div class="block"><h2>Voice</h2>
+        <div class="row">
+          <button type="button" id="speak">Speak</button><button type="button" id="speakAmp">Speak (áudio apenas)</button>
+          <button type="button" id="stop">Stop</button><button type="button" id="pause">Pause</button><button type="button" id="resume">Resume</button>
+          <label class="filebtn">Enviar áudio<input type="file" id="audioFile" accept="audio/*"></label>
+        </div>
+        <p class="status" id="voiceStatus" role="status">Speak usa a voz de teste com fonemas (VisemeEngine). “Áudio apenas” usa só o sinal (AmplitudeFallback).</p></div>
+      <div class="block"><h2>Gaze</h2><div class="row" id="gazeRow" role="group" aria-label="Gaze"></div></div>
+      <div class="block"><h2>Scene</h2>
+        <div class="row" id="ctxRow" role="group" aria-label="Context"></div>
+        <label class="range">Atenção <input type="range" id="attention" min="0" max="100" value="90"></label>
+        <label class="range">Movimento natural <input type="range" id="idle" min="0" max="100" value="100"></label>
+        <div class="row"><button type="button" id="clean">Modo limpo (esconder controles)</button><button type="button" id="quality" aria-pressed="false">Qualidade baixa</button></div></div>
+    </div>
+  </div>
+  <div class="below">
+    <div class="card"><h2>Rig report</h2><div id="rig"></div></div>
+    <div class="card"><h2>Diagnostics</h2><table id="diag"></table></div>
+    <div class="card"><h2>Log</h2><ul id="log"></ul></div>
+  </div>
+
+  <section class="val" id="tour" aria-labelledby="tourTitle">
+    <div class="row" style="justify-content: space-between; align-items: center">
+      <h2 class="big" id="tourTitle">Revisão guiada (Fase 2)</h2>
+      <div class="row"><button type="button" id="tourRun">Iniciar revisão</button><button type="button" id="tourStop">Parar</button></div>
+    </div>
+    <p class="status" id="tourCap" role="status">Percorre neutral, listening, thinking, firm, skeptical, empathy, fala com fonemas, fala só com áudio, olhar (esquerda, direita, baixo, cima, câmera), piscadas e o teste de presença de 1,5 s. Use “Modo limpo” (H) para ver o rosto sem a interface.</p>
+  </section>
+  <section class="val" id="gate" aria-labelledby="gateTitle">
+    <div class="row" style="justify-content: space-between; align-items: center">
+      <h2 class="big" id="gateTitle">Head Review Scene</h2>
+      <div class="row"><label class="filebtn">Candidato (GLB)<input type="file" id="gateFile" accept=".glb"></label><input id="gateId" value="HEAD-001" aria-label="Candidate id" style="width:110px"><button type="button" id="gateRun" disabled>Rodar revisão padrão</button><button type="button" id="gateCopy">Copiar resultado (JSON)</button></div>
+    </div>
+    <p class="status" id="gateStatus" role="status">Mesma câmera, lente, luz, fundo, resolução e exposição para todo candidato (configuração <code id="gateCfg"></code>). Carregue o GLB, rode a revisão (cerca de 30 s) e depois cole as notas humanas (JSON do <code>review.html</code>) para ver recomendação, barreiras e pontuações.</p>
+    <div id="gateOut" hidden>
+      <div class="valtop"><div class="score"><div class="n" id="gateRec">—</div><span class="pill" id="gateRecPill"></span><p class="status" id="gateWhy"></p><ul class="gates" id="gateBars"></ul></div><div class="tablewrap"><table id="gateSections"></table></div></div>
+      <details open><summary>Cenas padrão (10 planos) e teste de presença de 1,5 s</summary><div id="gateShots" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px"></div></details>
+      <details><summary>Fala (frase padrão), expressões, transições</summary><div id="gateReports"></div></details>
+      <details><summary>Notas humanas (JSON)</summary><div><textarea id="gateRatings" spellcheck="false" placeholder="Cole aqui o JSON gerado pelo review.html"></textarea><div class="row"><button type="button" id="gateApply">Aplicar notas</button></div></div></details>
+    </div>
+  </section>
+  <section class="val" id="validation" aria-labelledby="valTitle">
+    <div class="row" style="justify-content: space-between; align-items: center">
+      <h2 class="big" id="valTitle">Asset Validation</h2>
+      <div class="row">
+        <select id="valPhase" aria-label="Fase do asset" style="width:auto"><option value="head">Fase 1: cabeça</option><option value="full">Personagem completo</option></select>
+        <button type="button" id="valRun">Validar asset carregado</button>
+        <button type="button" id="valCopy">Copiar relatório (JSON)</button>
+      </div>
+    </div>
+    <p class="status" id="valStatus" role="status">Carregue um GLB (botão “Carregar GLB” acima) e clique em “Validar asset carregado”. O modelo procedural não é validado.</p>
+    <div class="valtop" id="valTop" hidden>
+      <div class="score"><div class="n" id="valScore">—</div><span class="pill" id="valVerdict"></span><p class="status" id="valWhy"></p><ul class="gates" id="valGates"></ul></div>
+      <div class="tablewrap"><table id="valCats"></table></div>
+    </div>
+    <div id="valBody" hidden>
+      <details open><summary>Avaliação visual (humana): 46 dos 100 pontos</summary><div>
+        <p class="status">Código mede estrutura e comportamento. Se o rosto parece uma executiva digital premium ou um avatar 3D genérico, quem decide é você. Use os botões de Expressions, Cognitive State, Voice e Gaze acima e dê notas de 0 a 5.</p>
+        <div class="rubric" id="rubric"></div>
+        <div class="row" role="radiogroup" aria-label="Veredito visual" id="overall"></div>
+      </div></details>
+      <details><summary>Checks (um a um)</summary><div class="tablewrap"><table id="rChecks"></table></div></details>
+      <details><summary>Rig report</summary><div id="rRig"></div></details>
+      <details><summary>Blendshape report</summary><div id="rBlend"></div></details>
+      <details><summary>Viseme report</summary><div id="rVis"></div></details>
+      <details><summary>Eye report</summary><div id="rEye"></div></details>
+      <details><summary>Mouth report</summary><div id="rMouth"></div></details>
+      <details><summary>Material report · texturas</summary><div id="rMat"></div></details>
+      <details><summary>Geometria · arquivo · animação</summary><div id="rGeo"></div></details>
+      <details><summary>Performance (FPS)</summary><div id="rPerf"></div></details>
+      <details><summary>Expression test</summary><div id="rExpr"></div></details>
+      <details><summary>Lip-sync test</summary><div id="rLip"></div></details>
+      <details><summary>JSON</summary><div><pre id="rJson"></pre></div></details>
+    </div>
+  </section>
+</div>
+
+<!--THREE-->
+<script>
+/*KIT*/
+</script>
+<script>
+/*MAKEGLB*/
+</script>
+<script>
+(function () {
+  var WA = window.AvatarKit, QS = new URLSearchParams(location.search), $ = function (id) { return document.getElementById(id); };
+  var stage = $('stage'), avatar, rigText = $('rigmap');
+  var EXPR = ['neutral', 'listening', 'thinking', 'analyzing', 'firm', 'skeptical', 'empathetic', 'confident', 'concerned', 'decisive'];
+  var COG = ['LISTENING', 'PROCESSING', 'THINKING', 'SPEAKING', 'DECIDING', 'WARNING', 'EMPATHY', 'CHALLENGE', 'CONFIDENCE'];
+  var title = function (s) { return s.charAt(0) + s.slice(1).toLowerCase(); };
+
+  function log(msg, kind) {
+    var li = document.createElement('li'); if (kind) li.className = kind; li.textContent = new Date().toLocaleTimeString([], { hour12: false }) + '  ' + msg;
+    var ul = $('log'); ul.insertBefore(li, ul.firstChild); while (ul.children.length > 60) ul.removeChild(ul.lastChild);
+  }
+  function banner(msg, kind) { var b = $('banner'); if (!msg) { b.hidden = true; return; } b.hidden = false; b.className = 'banner ' + (kind || ''); b.textContent = msg; }
+
+  try { avatar = WA.createAvatar(stage, { shot: 'CLOSE', style: 'conversation', look: 'cursor', quality: QS.get('quality') || 'high', paused: QS.get('paused') === '1', adaptive: QS.get('paused') !== '1' }); }
+  catch (e) { banner('Não foi possível iniciar o 3D (' + (e.code || 'erro') + '): ' + e.message, 'err'); log(e.message, 'e'); return; }
+  window.avatar = avatar;
+
+  function group(id, items, label, onClick, pressedFirst) {
+    var row = $(id); items.forEach(function (it, i) {
+      var b = document.createElement('button'); b.type = 'button'; b.textContent = label ? label(it) : it; b.setAttribute('data-v', it); b.setAttribute('aria-pressed', String(!!pressedFirst && i === 0));
+      b.addEventListener('click', function () { onClick(it, b); }); row.appendChild(b);
+    });
+  }
+  function press(id, v) { document.querySelectorAll('#' + id + ' button').forEach(function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-v') === v)); }); }
+
+  group('exprRow', EXPR, title, function (n) { avatar.setExpression(n); }, true);
+  group('cogRow', COG, title, function (n) { avatar.setCognitiveState(n); });
+  group('shotRow', ['CLOSE', 'MEDIUM', 'FULL'], title, function (n) { avatar.setShot(n); }, true);
+  group('styleRow', ['conversation', 'executive', 'intimate'], title, function (n) { avatar.setCameraStyle(n); }, true);
+  group('ctxRow', ['conversation', 'executive', 'intimate'], function (s) { return 'Contexto: ' + s; }, function (n) { avatar.setContext(n); press('ctxRow', n); }, true);
+  group('gazeRow', ['camera', 'cursor', 'center', 'left', 'right'], title, function (n) { avatar.lookAt(n); }, false);
+  press('gazeRow', 'cursor');
+  avatar.on('expression', function (n) { press('exprRow', n); });
+  avatar.on('cognitive', function (n) { press('cogRow', n || ''); });
+  avatar.on('shot', function (n) { press('shotRow', n); });
+  avatar.on('style', function (n) { press('styleRow', n); });
+  avatar.on('gaze', function (n) { press('gazeRow', n); });
+  avatar.on('error', function (e) { log((e.code || 'ERROR') + ': ' + e.message, 'e'); banner(e.message, 'err'); });
+  avatar.on('warning', function (e) { log((e.code || 'WARN') + ': ' + e.message, 'w'); if (/FETCH|PARSE|RIG|MODEL|BAD|EMPTY|NO_/.test(e.code || '')) banner(e.message, 'warn'); });
+  avatar.on('quality', function (q) { log('adaptive resolution -> pixel ratio ' + q.pixelRatio.toFixed(2), 'w'); });
+
+  /* ---------- voice ---------- */
+  var vs = $('voiceStatus'), voice = null;
+  function say(m) { vs.textContent = m; }
+  function getVoice() { return voice || (voice = WA.makeTestVoiceWithVisemes(22050)); }
+  $('speak').addEventListener('click', function () { var v = getVoice(); say('Falando (fonemas + áudio).'); avatar.speak(v.pcm, { sampleRate: v.sampleRate, visemes: v.events }).then(function () { say('Fim.'); }, function (e) { say('Erro: ' + e.message); log(e.code + ': ' + e.message, 'e'); }); });
+  $('speakAmp').addEventListener('click', function () { var v = getVoice(); say('Falando (somente amplitude do áudio).'); avatar.speak(v.pcm, { sampleRate: v.sampleRate }).then(function () { say('Fim.'); }, function (e) { say('Erro: ' + e.message); log(e.code + ': ' + e.message, 'e'); }); });
+  $('stop').addEventListener('click', function () { avatar.stopSpeaking(); say('Parado.'); });
+  $('pause').addEventListener('click', function () { if (avatar.pauseSpeech()) say('Em pausa.'); });
+  $('resume').addEventListener('click', function () { if (avatar.resumeSpeech()) say('Retomado.'); });
+  $('audioFile').addEventListener('change', function (e) { var f = e.target.files[0]; if (!f) return; say('Falando ' + f.name + ' (somente amplitude: arquivos não trazem fonemas).'); avatar.speak(f).then(function () { say('Fim.'); }, function (er) { say('Erro: ' + er.message); log(er.code + ': ' + er.message, 'e'); }); e.target.value = ''; });
+
+  /* ---------- scene ---------- */
+  $('attention').addEventListener('input', function (e) { avatar.setAttention(+e.target.value / 100); });
+  $('idle').addEventListener('input', function (e) { avatar.idle({ intensity: +e.target.value / 100 }); });
+  function setClean(on) { document.body.classList.toggle('clean', on); }
+  $('clean').addEventListener('click', function () { setClean(true); }); $('exitClean').addEventListener('click', function () { setClean(false); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') setClean(false); if (e.key.toLowerCase() === 'h' && !/INPUT|TEXTAREA/.test((e.target.tagName || ''))) setClean(!document.body.classList.contains('clean')); });
+  $('quality').addEventListener('click', function (e) { var low = e.target.getAttribute('aria-pressed') !== 'true'; e.target.setAttribute('aria-pressed', String(low)); avatar.setQuality(low ? 'low' : 'high'); });
+  if (QS.get('clean') === '1') setClean(true);
+
+  /* ---------- model ---------- */
+  function rigMap() { var t = rigText.value.trim(); if (!t) return undefined; try { return JSON.parse(t); } catch (e) { banner('RigMap inválido: ' + e.message, 'err'); throw e; } }
+  function loadSpec(spec, label) {
+    $('modelStatus').textContent = 'Carregando ' + label + '…'; banner('');
+    return avatar.loadAvatar(spec).then(function (r) {
+      press('modelRow', r.source); document.querySelectorAll('[data-model]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-model') === r.source)); });
+      $('modelStatus').textContent = r.fallback ? 'Usando o fallback procedural: ' + (r.error && r.error.message) : label + ' carregado (' + r.info.kind + ').';
+      if (r.fallback) banner('Fallback procedural ativo. Motivo: ' + (r.error && r.error.message), 'warn'); renderRig(r.rigReport, r.info); return r;
+    }, function (e) { $('modelStatus').textContent = 'Falhou: ' + e.message; });
+  }
+  document.querySelector('[data-model="procedural"]').addEventListener('click', function () { loadSpec({ source: 'procedural' }, 'Procedural'); });
+  $('glbFile').addEventListener('change', function (e) {
+    var f = e.target.files[0]; if (!f) return; var rm; try { rm = rigMap(); } catch (x) { return; }
+    f.arrayBuffer().then(function (buf) { return loadSpec({ source: 'auto', data: buf, rigMap: rm }, f.name); }); e.target.value = '';
+  });
+  $('demoGlb').addEventListener('click', function () {
+    if (!window.makeFixtureGLB) { banner('Gerador de GLB de teste indisponível nesta build.', 'warn'); return; }
+    loadSpec({ source: 'auto', data: window.makeFixtureGLB(), rigMap: { preset: 'arkit' } }, 'GLB de teste (rig completo, geometria simples)');
+  });
+
+  function renderRig(rep, info) {
+    var el = $('rig'); el.textContent = '';
+    if (!rep) { el.textContent = 'Sem relatório.'; return; }
+    var g = document.createElement('div'); g.className = 'grade ' + rep.grade; g.textContent = 'grade: ' + rep.grade + (rep.coverage != null ? '  ·  cobertura ' + Math.round(rep.coverage * 100) + '%  ·  visemas nativos: ' + (rep.visemesNative ? 'sim' : 'não') : ''); el.appendChild(g);
+    var C = WA.Channels;
+    if (rep.found) { var ch = document.createElement('div'); ch.className = 'chips'; C.ARKIT.forEach(function (n) { var i = document.createElement('i'); i.textContent = n; if (rep.found.indexOf(n) >= 0) i.className = 'has'; ch.appendChild(i); }); el.appendChild(ch); }
+    else if (rep.channels) { var p = document.createElement('p'); p.className = 'status'; p.textContent = rep.channels.resolved + ' de ' + rep.channels.total + ' canais suportados.'; el.appendChild(p); }
+    (rep.warnings || rep.notes || []).forEach(function (w) { var p = document.createElement('p'); p.className = 'status'; p.textContent = '• ' + w; el.appendChild(p); });
+  }
+
+  /* ---------- HUD and diagnostics ---------- */
+  function refresh() {
+    var d = avatar.debug(), s = avatar.stats(), caps = avatar.capabilities(), m = s.model || {};
+    $('hud').innerHTML = '<span>modelo <b>' + (d.model || '-') + '</b></span><span>expressão <b>' + d.expression + '</b></span><span>estado <b>' + (d.cognitive || '-') + '</b></span><span>plano <b>' + d.shot + '/' + d.style + '</b></span>' +
+      '<span>fala <b>' + (d.speech && d.speech.source !== 'none' ? d.speech.source : '-') + '</b></span><span>olhar <b>' + (d.gaze && d.gaze.away ? 'desvio' : 'direto') + '</b></span>';
+    var rows = [['fps', s.fps], ['frame (ms)', s.frameMs], ['simulação (ms)', s.stepMs], ['modelo update (ms)', s.modelUpdateMs], ['pixel ratio', s.pixelRatio], ['triângulos', s.triangles], ['draw calls', s.drawCalls], ['geometrias', s.geometries], ['texturas', s.textures],
+      ['kind', m.kind], ['triângulos do modelo', m.triangles], ['morph targets', m.morphTargetsMax != null ? m.morphTargetsMax : '-'], ['visemas nativos', caps.visemes ? 'sim' : 'não'], ['olhos', caps.eyeMode || (caps.eyeBones ? 'bones' : '-')], ['mandíbula', caps.jawMode || (caps.jaw ? 'sim' : 'não')]];
+    $('diag').innerHTML = rows.map(function (r) { return '<tr><td>' + r[0] + '</td><td>' + r[1] + '</td></tr>'; }).join('');
+  }
+  setInterval(refresh, 500);
+  avatar.ready.then(function (r) { renderRig(r.rigReport, r.info); refresh(); log('pronto: ' + r.info.kind + (r.fallback ? ' (fallback)' : ''), r.fallback ? 'w' : ''); window.__ready = true; });
+  avatar.setCognitiveState('LISTENING');
+
+
+
+  /* ---------- guided review (phase 2) ---------- */
+  (function () {
+    var token = 0, cap = $('tourCap');
+    function wait(ms, t) { return new Promise(function (res) { setTimeout(function () { res(t === token); }, ms); }); }
+    var steps = [
+      ['Neutral', function () { avatar.setCognitiveState('LISTENING'); avatar.setExpression('neutral'); avatar.lookAt('camera'); }, 4500, 'Rosto em repouso: pálpebras relaxadas, boca fechada sem tensão, respiração e piscadas.'],
+      ['Listening', function () { avatar.setCognitiveState('LISTENING'); }, 5000, '“Estou ouvindo tudo.” Sobrancelha interna levemente elevada, inclinação mínima da cabeça, foco no olhar.'],
+      ['Thinking', function () { avatar.setCognitiveState('THINKING'); }, 6500, 'O olhar desvia e volta ao direto. Pouco movimento de boca.'],
+      ['Analyzing', function () { avatar.setCognitiveState('PROCESSING'); }, 5500, '“Entendi o que você não disse.” Olhos levemente estreitados, sobrancelhas baixas, boca com tensão leve.'],
+      ['Firm', function () { avatar.setExpression('firm'); avatar.lookAt('camera'); }, 5000, '“Você sabe que eu vou confrontar isso.” Mandíbula tensa, olhar direto, sorriso reduzido.'],
+      ['Skeptical', function () { avatar.setExpression('skeptical'); }, 5000, 'Sobrancelha assimétrica, leve estreitamento de um olho, tensão na boca.'],
+      ['Empathy', function () { avatar.setCognitiveState('EMPATHY'); }, 5000, '“Eu entendo. Mas não vou mentir para você.” Pálpebras mais suaves, sobrancelha relaxada, leve inclinação.'],
+      ['Confidence', function () { avatar.setCognitiveState('CONFIDENCE'); }, 4500, '“Eu sei exatamente o que fazer.” Olhar direto e sereno, sorriso contido.'],
+      ['Speaking + lip sync (fonemas)', function () { var v = WA.makeTestVoiceWithVisemes(22050); avatar.setCognitiveState('SPEAKING'); avatar.speak(v.pcm, { sampleRate: v.sampleRate, visemes: v.events }).catch(function () {}); }, 7600, 'Veja lábios (fechamentos em p/b/m), dentes e língua. Não deve ser só abrir e fechar a boca.'],
+      ['Lip sync (só áudio)', function () { var v = WA.makeTestVoiceWithVisemes(22050); avatar.speak(v.pcm, { sampleRate: v.sampleRate }).catch(function () {}); }, 7600, 'Fallback por amplitude, para quando não houver fonemas.'],
+      ['Eye tracking: esquerda', function () { avatar.setCognitiveState('LISTENING'); avatar.lookAt('left'); }, 2500, 'Olhos e cabeça seguem; a cabeça gira menos que os olhos.'],
+      ['Eye tracking: direita', function () { avatar.lookAt('right'); }, 2500, ''],
+      ['Eye tracking: baixo', function () { avatar.lookAt('down'); }, 2500, 'A pálpebra superior desce junto com o olhar.'],
+      ['Eye tracking: cima', function () { avatar.lookAt('up'); }, 2500, ''],
+      ['Eye tracking: câmera', function () { avatar.lookAt('camera'); }, 3000, 'Volta ao olhar direto.'],
+      ['Blinking', function () { avatar.setCognitiveState('LISTENING'); avatar.lookAt('camera'); }, 7000, 'Observe a piscada: rápida ao fechar, mais lenta ao abrir, com espaçamento irregular, sem pálpebra atravessando o olho.'],
+      ['Teste de presença (1,5 s de silêncio)', function () {
+        avatar.setCognitiveState('LISTENING'); avatar.lookAt('camera');
+        setTimeout(function () { avatar.setExpression('listening', { intensity: 1.15 }); }, 600);
+        setTimeout(function () { var v = WA.makeTestVoiceWithVisemes(22050); avatar.setCognitiveState('SPEAKING'); avatar.speak(v.pcm, { sampleRate: v.sampleRate, visemes: v.events }).catch(function () {}); }, 2600);
+      }, 7000, 'O usuário terminou de falar. 1,5 s de silêncio, olhar direto, pequena mudança de sobrancelha, respiração, e então ela responde. Isso parece inteligência ou animação? (Aproximação com os controles atuais; o asset final deve sustentar este momento.)']
+    ];
+    function stop() { token++; avatar.stopSpeaking(); avatar.lookAt('camera'); $('tourRun').disabled = false; }
+    $('tourStop').addEventListener('click', function () { stop(); cap.textContent = 'Revisão interrompida.'; });
+    $('tourRun').addEventListener('click', function () {
+      var t = ++token; $('tourRun').disabled = true; var i = 0;
+      (function next() {
+        if (t !== token) return; if (i >= steps.length) { cap.textContent = 'Revisão concluída. Dê as notas na avaliação visual abaixo.'; $('tourRun').disabled = false; avatar.stopSpeaking(); return; }
+        var st = steps[i++]; avatar.stopSpeaking(); cap.textContent = i + '/' + steps.length + '  ' + st[0] + (st[3] ? ' · ' + st[3] : '');
+        try { st[1](); } catch (e) { log(e.message, 'e'); }
+        wait(st[2], t).then(function (ok) { if (ok) next(); });
+      })();
+    });
+  })();
+
+  /* ---------- head review scene (head gate) ---------- */
+  (function () {
+    var HG = WA.HeadGate, buf = null, last = null, ratings = null, name = '';
+    function el(tag, txt, cls) { var e = document.createElement(tag); if (txt != null) e.textContent = txt; if (cls) e.className = cls; return e; }
+    $('gateCfg').textContent = HG.configHash();
+    $('gateFile').addEventListener('change', function (e) { var f = e.target.files[0]; if (!f) return; name = f.name; f.arrayBuffer().then(function (b) { buf = b; $('gateRun').disabled = false; $('gateStatus').textContent = f.name + ' pronto (' + (b.byteLength / 1048576).toFixed(2) + ' MB).'; }); e.target.value = ''; });
+    function draw() {
+      if (!last) return; var cand = { id: last.candidate.id, review: { automated: last, ratings: ratings } }, rec = HG.recommend(last, ratings), S = rec.scores.sections;
+      $('gateOut').hidden = false; $('gateRec').textContent = rec.recommendation; var p = $('gateRecPill'); p.textContent = rec.auto ? 'regras automáticas' : 'humano decide'; p.className = 'pill ' + (rec.recommendation === 'PASS' ? 'ACEITAR' : rec.recommendation === 'REJECTED' ? 'REJEITAR' : 'PENDENTE');
+      $('gateWhy').textContent = rec.why.concat(rec.todo).join(' · ');
+      var g = $('gateBars'); g.textContent = ''; rec.barriers.forEach(function (b) { var li = el('li', b.id + ' ' + b.label + (b.triggered === true ? ': ' + b.evidence.join('; ') : b.triggered == null ? ' (a confirmar)' : ''), b.triggered === true ? 'fail' : b.triggered == null ? 'unk' : ''); g.appendChild(li); });
+      var t = $('gateSections'); t.textContent = ''; var hd = el('tr'); ['Seção', 'Nota', 'Estado'].forEach(function (h) { hd.appendChild(el('th', h)); }); t.appendChild(hd);
+      Object.keys(S).forEach(function (k) { var tr = el('tr'); tr.appendChild(el('td', k)); tr.appendChild(el('td', S[k].value == null ? 'HUMAN REVIEW REQUIRED' : S[k].value + '%', S[k].value == null ? 'mid' : '')); tr.appendChild(el('td', S[k].status + (S[k].rated != null ? ' (' + S[k].rated + '/' + S[k].of + ')' : ''))); t.appendChild(tr); });
+      var sh = $('gateShots'); sh.textContent = ''; [].concat(last.shots, last.presence.frames.map(function (f) { return { id: 'presença t=' + f.t + 's', dataUrl: f.dataUrl }; })).forEach(function (s) { if (!s.dataUrl) return; var f = el('figure'); f.style.margin = 0; var im = new Image(); im.src = s.dataUrl; im.style.cssText = 'width:100%;border:1px solid var(--line);border-radius:6px'; f.appendChild(im); f.appendChild(el('figcaption', s.id)); f.lastChild.style.cssText = 'font:11px var(--mono);color:var(--muted)'; sh.appendChild(f); });
+      var r = $('gateReports'); r.textContent = ''; var sp = last.speech, tr = last.transitions, ex = last.expression, mp = last.mapping;
+      [['Fala', sp.script.seconds + ' s · ' + sp.script.syllables + ' sílabas · flags: ' + (sp.flags.join(' | ') || 'nenhuma')], ['Transições', (tr.flags.join(' | ') || 'nenhuma flag automática')], ['Expressões', 'pico ' + ex.maxPeak + ' · assimetria cética ' + ex.skepticalAsym + ' · mortas: ' + (ex.dead.join(', ') || 'nenhuma') + ' · indistintas: ' + (ex.indistinct.join(', ') || 'nenhuma')],
+        ['Mapeamento', 'não reproduzíveis: ' + (mp.notReproducible.join(', ') || 'nenhuma') + ' · visemas faltando: ' + (mp.visemes.missing.join(', ') || 'nenhum') + ' · a confirmar (fuzzy): ' + (mp.fuzzyChannels.join(', ') || 'nenhum')],
+        ['Presença 1,5 s', JSON.stringify(last.presence.metrics) + ' · HUMAN REVIEW REQUIRED: perguntas A, B, C']].forEach(function (x) { var p = el('p', null, 'status'); p.appendChild(el('b', x[0] + ': ')); p.appendChild(document.createTextNode(x[1])); r.appendChild(p); });
+    }
+    $('gateRun').addEventListener('click', function () {
+      if (!buf) return; var id = $('gateId').value.trim(); if (!HG.ID_RE.test(id)) { $('gateStatus').textContent = 'O id deve ser como HEAD-001.'; return; } $('gateRun').disabled = true;
+      var sha = HG.hash(String(buf.byteLength)) + '-' + buf.byteLength;
+      WA.HeadReview.run({ id: id, version: 1, sha256: sha, data: buf, rigMap: undefined }, { keepImages: true, fps: true, onProgress: function (p) { $('gateStatus').textContent = 'Revisão: ' + p + '…'; } }).then(function (r) { last = r; ratings = null; draw(); $('gateStatus').textContent = 'Revisão concluída (' + name + '). ' + (r.software ? 'Renderizador por software: FPS não vale.' : ''); }, function (e) { $('gateStatus').textContent = 'Falhou: ' + e.message; log(e.message, 'e'); }).then(function () { $('gateRun').disabled = false; });
+    });
+    $('gateApply').addEventListener('click', function () { try { var raw = JSON.parse($('gateRatings').value); ['items', 'speech', 'humanBarriers'].forEach(function (k) { Object.keys(raw[k] || {}).forEach(function (q) { if (raw[k][q] == null) delete raw[k][q]; }); }); ratings = HG.mergeRatings(null, raw); draw(); } catch (e) { $('gateStatus').textContent = 'JSON inválido: ' + e.message; } });
+    $('gateCopy').addEventListener('click', function () { if (!last) return; var out = JSON.stringify({ review: WA.AssetValidator.serialize(Object.assign({}, last, { shots: last.shots.map(function (s) { return { id: s.id, hash: s.hash }; }) })), ratings: ratings }, null, 1); try { navigator.clipboard.writeText(out).then(function () { $('gateStatus').textContent = 'Copiado.'; }); } catch (e) { $('gateRatings').value = out; } });
+  })();
+
+  /* ---------- asset validation ---------- */
+  (function () {
+    var AV = WA.AssetValidator, last = null, manual = { scores: {}, overall: null }, running = false;
+    function el(tag, txt, cls) { var e = document.createElement(tag); if (txt != null) e.textContent = txt; if (cls) e.className = cls; return e; }
+    function tbl(head, rows) {
+      var t = el('table'), tr = el('tr'); head.forEach(function (h) { tr.appendChild(el('th', h)); }); t.appendChild(tr);
+      rows.forEach(function (r) { var tr2 = el('tr'); r.forEach(function (c) { var td = el('td'); if (c && typeof c === 'object' && c.t != null) { td.textContent = c.t; if (c.c) td.className = c.c; } else td.textContent = c == null ? '-' : c; tr2.appendChild(td); }); t.appendChild(tr2); }); return t;
+    }
+    function put(id, nodes) { var c = $(id); c.textContent = ''; [].concat(nodes).forEach(function (n) { c.appendChild(typeof n === 'string' ? el('p', n, 'status') : n); }); }
+    var f3 = function (x) { return x == null ? '-' : (+x).toFixed(4); }, tick = function (b) { return { t: b ? 'sim' : 'não', c: b ? 'ok' : 'no' }; };
+
+    function renderResult() {
+      if (!last) return; var res = AV.evaluate(last.report, { phase: $('valPhase').value, manual: manual }); last.result = res;
+      $('valTop').hidden = false; $('valBody').hidden = false;
+      var n = $('valScore'); n.textContent = ''; n.appendChild(document.createTextNode(res.total == null ? '—' : String(res.total))); var sm = el('small', res.total == null ? '  técnico ' + res.technical.percent + '%' : ' / 100'); n.appendChild(sm);
+      var v = $('valVerdict'); v.textContent = res.verdict; v.className = 'pill ' + res.verdict; $('valWhy').textContent = res.why;
+      var g = $('valGates'); g.textContent = ''; res.gates.forEach(function (x) { g.appendChild(el('li', x.label, x.ok ? '' : 'fail')); });
+      var cats = $('valCats'); cats.textContent = ''; var hd = el('tr'); ['Categoria', 'Automático', 'Humano', 'Nota'].forEach(function (h) { hd.appendChild(el('th', h)); }); cats.appendChild(hd);
+      res.categories.forEach(function (c) {
+        var tr = el('tr'); tr.appendChild(el('td', c.label + ' (' + c.weight + ')'));
+        tr.appendChild(el('td', c.autoMax ? (c.auto == null ? 'não medido' : c.auto.toFixed(1)) + ' / ' + c.autoMax.toFixed(1) + (c.unmeasured ? '  (' + c.unmeasured + ' sem medir)' : '') : '-'));
+        tr.appendChild(el('td', c.manualMax ? (c.manual == null ? 'pendente' : c.manual.toFixed(1)) + ' / ' + c.manualMax.toFixed(1) : '-', c.manualPending ? 'mid' : ''));
+        var td = el('td'); var bar = el('div', null, 'bar'), i = el('i'); i.style.width = (c.total == null ? (c.auto == null ? 0 : c.auto / c.weight * 100) : c.total / c.weight * 100) + '%'; bar.appendChild(i); td.appendChild(bar); tr.appendChild(td); cats.appendChild(tr);
+      });
+      var rows = res.checks.filter(function (c) { return c.w > 0 || c.gate; }).map(function (c) { return [c.cat, c.label, c.s == null ? { t: 'n/m', c: 'mid' } : { t: Math.round(c.s * 100) + '%', c: c.s >= 0.8 ? 'ok' : c.s >= 0.5 ? 'mid' : 'no' }, c.d]; });
+      put('rChecks', tbl(['cat', 'verificação', 'nota', 'detalhe'], rows));
+    }
+
+    function renderReports(r) {
+      var rig = r.rig, B = r.blendshapes, V = r.visemes, E = r.eyes, M = r.mouth, MT = r.materials, G = r.geometry, D = r.delivery, A = r.animation;
+      put('rRig', [tbl(['item', 'valor'], [['grade', rig.grade], ['cobertura ARKit', Math.round(rig.coverage * 100) + '% (' + rig.found.length + '/52)'], ['essenciais faltando', rig.essentialMissing.join(', ') || 'nenhum'], ['visemas nativos', tick(rig.visemesNative)], ['ossos resolvidos', Object.keys(r.landmarks ? {} : {}).length || A.bones], ['morphs não reconhecidos', rig.unmatchedMorphs.length], ['avisos', rig.warnings.join(' | ') || 'nenhum']]),
+        el('p', 'Faltam: ' + (rig.missing.join(', ') || 'nenhum') + (rig.unmatchedMorphs.length ? '. Não reconhecidos: ' + rig.unmatchedMorphs.slice(0, 20).join(', ') : ''), 'status')]);
+      var worst = Object.keys(B.perChannel).sort(function (a, b) { return B.perChannel[a].rms - B.perChannel[b].rms; }).slice(0, 8).map(function (c) { return [c, f3(B.perChannel[c].rms), f3(B.perChannel[c].max), B.perChannel[c].carriedBy.join(', ')]; });
+      put('rBlend', [tbl(['item', 'valor'], [['canais encontrados', B.found], ['mortos', B.dead.join(', ') || 'nenhum'], ['fora do limite (>20% da cabeça)', B.outliers.join(', ') || 'nenhum'], ['pares L/R quebrados', B.asymmetricBroken.join(', ') || 'nenhum'], ['pares idênticos (espelho mecânico)', B.perfectMirror + ' de ' + B.pairs.length], ['jawClench', tick(B.jawClench)]]),
+        el('p', 'Menores deslocamentos (em alturas de cabeça):', 'status'), tbl(['canal', 'rms', 'máx', 'malhas'], worst)]);
+      put('rVis', [tbl(['viseme', 'rms', 'malhas'], Object.keys(V.perViseme).map(function (v) { return [v, f3(V.perViseme[v].rms), V.perViseme[v].carriedBy.join(', ')]; })),
+        el('p', 'Faltam: ' + (V.missing.join(', ') || 'nenhum') + '. Distintos: ' + V.distinct + '/15. Pares quase idênticos: ' + (V.duplicates.map(function (p) { return p[0].replace('viseme_', '') + '~' + p[1].replace('viseme_', ''); }).join(', ') || 'nenhum') + '. Língua carrega ' + V.tongueCarries + ', dentes ' + V.teethCarries + '.', 'status')]);
+      put('rEye', tbl(['item', 'valor'], [['ossos (esq/dir)', tick(E.bones.left).t + ' / ' + tick(E.bones.right).t], ['modo de olhar', E.mode], ['malhas de olho', E.eyeMeshes + ' (' + E.eyeTris + ' tri)'], ['malhas de córnea', E.corneaMeshes], ['material reflexivo', tick(E.reflective)], ['pivô vs centro do globo', E.pivot.map(function (p) { return p.slot + ': ' + p.offsetRatio + ' raios'; }).join('; ') || 'não medido'], ['morphs eyeLook', E.lookMorphs + '/8'], ['piscada independente', tick(E.blinkIndependent)]]));
+      put('rMouth', tbl(['item', 'valor'], [['mandíbula', M.jawMorph ? 'morph jawOpen' : M.jawMode], ['dentes', M.teeth], ['língua', M.tongue], ['interior da boca', M.inner], ['tongueOut', tick(M.tongueOut)], ['canais de boca (funnel, pucker, roll, press)', M.mouthChannels + '/7']]));
+      put('rMat', [tbl(['material', 'tipo', 'mapas', 'rugos.', 'clearcoat', 'sheen', 'alfa'], MT.list.map(function (m) { return [m.name + (m.isSkin ? ' (pele)' : ''), m.type, Object.keys(m.maps).join(',') || '-', m.roughness == null ? '-' : m.roughness.toFixed(2), m.clearcoat.toFixed(2), m.sheen.toFixed(2), m.alphaTest ? 'test ' + m.alphaTest : m.transparent ? 'blend' : '-']; })),
+        el('p', MT.textures + ' textura(s), ' + MT.textureMB + ' MB na GPU, maior ' + MT.maxTexture + 'px. ' + MT.sssNote, 'status')]);
+      put('rGeo', [tbl(['item', 'valor'], [['triângulos', G.tris.toLocaleString('pt-BR')], ['por tipo', Object.keys(G.byKind).map(function (k) { return k + ' ' + G.byKind[k]; }).join(', ')], ['malhas com skin', G.skinned], ['draw calls', G.drawCalls], ['LODs', G.lods.join(', ') || 'nenhum'], ['arquivo', D.fileMB == null ? 'desconhecido' : D.fileMB + ' MB'], ['extensões', D.extensions.join(', ') || 'nenhuma'], ['meshopt / draco / KTX2', tick(D.meshopt).t + ' / ' + tick(D.draco).t + ' / ' + tick(D.ktx2).t], ['URIs externas', D.external.length], ['carregamento', D.loadMs == null ? '-' : D.loadMs + ' ms'], ['clipes', A.clips.map(function (c) { return c.name + ' ' + c.duration + 's' + (c.morphTracks ? ' (morph!)' : ''); }).join(', ') || 'nenhum']]),
+        tbl(['malha', 'tipo', 'triângulos', 'morphs', 'skin'], G.meshes.map(function (m) { return [m.name, m.kind, m.tris, m.morphs, tick(m.skinned)]; }))]);
+      put('rPerf', r.fps ? tbl(['item', 'valor'], [['FPS', r.fps.fps], ['frame (ms)', r.fps.frameMs], ['simulação (ms)', r.fps.stepMs], ['update do modelo (ms)', r.fps.modelUpdateMs], ['renderizador', r.fps.renderer], ['válido para nota', r.fps.software ? { t: 'não (software)', c: 'no' } : { t: 'sim (GPU)', c: 'ok' }]]) : 'FPS não medido.');
+      var X = r.expressionTest, Lp = r.lipTest;
+      put('rExpr', [tbl(['expressão', 'rms', 'máx', 'alto', 'meio', 'baixo', 'assim.', 'vs neutro', 'mais parecida', 'estado'], X.rows.map(function (x) { return [x.name, f3(x.rms), f3(x.max), f3(x.upper), f3(x.mid), f3(x.lower), x.asym, f3(x.fromNeutral), x.nearest, x.dead ? { t: 'morta', c: 'no' } : x.exploding ? { t: 'distorce', c: 'no' } : { t: 'ok', c: 'ok' }]; })),
+        el('p', 'Deslocamento em alturas de cabeça (1,0 = a cabeça inteira). Morta < ' + X.limits.dead + '; distorção > ' + X.limits.exploding + '. Estados cognitivos: ' + X.cognitive.map(function (c) { return c.name + ' ' + f3(c.rms); }).join(' · '), 'status')]);
+      put('rLip', [tbl(['viseme', 'rms', 'baixo', 'meio', 'alto', '% baixo'], Lp.rows.map(function (x) { return [x.viseme, f3(x.rms), f3(x.lower), f3(x.mid), f3(x.upper), x.lowerShare]; })),
+        el('p', 'Par mais próximo: ' + Lp.closestPair + ' (' + f3(Lp.minDistinct) + '). Fala de teste: ' + Lp.timeline.openClose + ' aberturas, mín/máx ' + Lp.timeline.minOverMax + '. Visemas nativos: ' + (Lp.nativeVisemes ? 'sim' : 'não (convertidos de ARKit)') + '.', 'status')]);
+      $('rJson').textContent = JSON.stringify(AV.serialize({ report: r, result: last.result }), null, 1).slice(0, 60000);
+    }
+
+    function buildRubric() {
+      var box = $('rubric'); box.textContent = ''; var cur = null;
+      AV.RUBRIC.forEach(function (it) {
+        if (it.cat !== cur) { cur = it.cat; box.appendChild(el('div', AV.CATEGORIES.filter(function (c) { return c.id === cur; })[0].label, 'cat')); }
+        var lab = el('label'); lab.appendChild(el('span', it.label)); var r = document.createElement('input'); r.type = 'range'; r.min = 0; r.max = 5; r.step = 0.5; r.value = 0; r.id = 'rb_' + it.id; r.setAttribute('aria-label', it.label);
+        var out = el('span', '–'); r.addEventListener('input', function () { manual.scores[it.id] = +r.value; out.textContent = r.value; renderResult(); }); lab.appendChild(r); lab.appendChild(out); box.appendChild(lab);
+      });
+      var o = $('overall'); o.textContent = ''; [['premium', 'Parece executiva digital premium'], ['generic', 'Parece avatar 3D genérico (rejeitar)']].forEach(function (x) {
+        var b = el('button', x[1]); b.type = 'button'; b.setAttribute('aria-pressed', 'false'); b.addEventListener('click', function () { manual.overall = x[0]; [].forEach.call(o.children, function (c) { c.setAttribute('aria-pressed', String(c === b)); }); renderResult(); }); o.appendChild(b);
+      });
+    }
+    buildRubric();
+
+    $('valRun').addEventListener('click', function () {
+      if (running) return; running = true; var st = $('valStatus'); st.textContent = 'Medindo: inspeção, teste de expressões, teste de lip sync e FPS (cerca de 10 s)…'; $('valRun').disabled = true;
+      setTimeout(function () {
+        AV.runAll(avatar, { phase: $('valPhase').value, manual: manual, fpsSeconds: 3 }).then(function (out) { last = out; renderResult(); renderReports(out.report); st.textContent = 'Concluído. Dê as notas visuais para fechar a nota final.'; }, function (e) { st.textContent = e.message; log(e.message, 'e'); }).then(function () { running = false; $('valRun').disabled = false; });
+      }, 50);
+    });
+    $('valPhase').addEventListener('change', function () { if (last) renderResult(); });
+    $('valCopy').addEventListener('click', function () {
+      if (!last) { $('valStatus').textContent = 'Valide um asset primeiro.'; return; }
+      var txt = JSON.stringify(AV.serialize({ report: last.report, result: last.result, manual: manual }), null, 1);
+      var done = function () { $('valStatus').textContent = 'Relatório copiado.'; }, fail = function () { $('valStatus').textContent = 'Não foi possível copiar: o JSON está na seção “JSON”.'; $('rJson').textContent = txt; };
+      try { navigator.clipboard.writeText(txt).then(done, fail); } catch (e) { fail(); }
+    });
+    window.__validation = function () { return last; };
+  })();
+})();
+</script>
