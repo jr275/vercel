@@ -25,9 +25,8 @@ export default function Page() {
   const [voice, setVoice] = useState<Voice>('auto');
   const [framing, setFraming] = useState<Framing>('MEDIUM_CLOSE');
   const [captions, setCaptions] = useState(false);
-  const [quality] = useState<'low' | 'medium'>(() =>
-    typeof window !== 'undefined' && window.matchMedia('(max-width: 700px)').matches ? 'low' : 'medium'
-  );
+  const [phone] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 700px)').matches);
+  const quality = phone ? 'low' : 'medium';
 
   const begin = () => {
     setStarted(true);
@@ -89,7 +88,7 @@ export default function Page() {
         <ExecutiveAvatar
           ref={avatar}
           quality={quality}
-          cameraStyle="executive"
+          cameraStyle={phone ? 'intimate' : 'executive'}
           shot="MEDIUM_CLOSE"
           speech="auto"
           basePath="/avatar-kit"

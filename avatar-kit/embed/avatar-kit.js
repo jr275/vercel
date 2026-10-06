@@ -1502,7 +1502,7 @@
   // visible height in head heights, and the landmark the frame is centred on (offset in head heights)
   var SHOTS = {
     CLOSE: { vis: 2.3, centre: 'eyeY', off: -0.42 },
-    MEDIUM_CLOSE: { vis: 2.65, centre: 'eyeY', off: -0.72 },      // the default of the executive runtime: head and shoulders, in the room
+    MEDIUM_CLOSE: { vis: 2.85, centre: 'eyeY', off: -0.56 },      // the default of the executive runtime: head and shoulders, in the room
     MEDIUM: { vis: 4.7, centre: 'eyeY', off: -1.55 },
     FULL: { vis: 7.6, centre: 'hipsY', off: 0 }
   };

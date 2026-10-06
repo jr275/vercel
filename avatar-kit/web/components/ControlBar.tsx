@@ -62,7 +62,7 @@ export function ControlBar({ busy, talking, error, onSend, onTalkStart, onTalkEn
           className="field"
           value={text}
           onChange={e => setText(e.target.value)}
-          placeholder="Say it the way you would to a colleague"
+          placeholder="Say it plainly"
           autoComplete="off"
           enterKeyHint="send"
         />

@@ -50,7 +50,7 @@ const waitSeen = async (p, fn, ms = 90000) => {
 };
 const begin = async p => { await p.getByRole('button', { name: 'Press to begin' }).click({ timeout: 90000 }); await p.waitForSelector('.bar'); };
 
-const p = await open(1280, 800);
+const p = await open(1440, 900);
 await step('the start screen waits for the character, then offers one button', async () => {
   await p.screenshot({ path: join(OUT, '00_loading.png') });
   await p.getByRole('button', { name: 'Press to begin' }).waitFor({ timeout: 90000 });
@@ -84,16 +84,25 @@ await step('typing a message: she thinks, speaks, and returns to ready; the tran
   await p.keyboard.press('Escape');
 });
 await step('interruption: sending while she speaks stops her and she answers the new message', async () => {
+  await p.screenshot({ path: join(OUT, 'loop_1_ready.png') });
   await track(p);
   await p.locator('#message').fill('Tell me what you think.');
   await p.locator('#message').press('Enter');
   await waitSeen(p, seen => seen.some(x => x.s === 'speaking'), 60000);
+  await p.waitForTimeout(1500);
+  await p.screenshot({ path: join(OUT, 'loop_2_speaking.png') });
   await p.locator('#message').fill('Wait, one more thing.');
   await p.locator('#message').press('Enter');
   await waitSeen(p, seen => { const i = seen.findIndex(x => x.s === 'speaking'); return seen.slice(i + 1).some(x => x.s === 'listening' || x.s === 'thinking'); }, 30000);
   const all = await seen(p), i = all.findIndex(x => x.s === 'speaking'), after = all.slice(i + 1).find(x => x.s === 'listening' || x.s === 'thinking');
   assert.equal(after.speaking, false, 'her voice stopped when the user interrupted');
+  await p.screenshot({ path: join(OUT, 'loop_3_interrupted_recovering.png') });
+  await waitSeen(p, seen => seen.filter(x => x.s === 'speaking').length >= 2);
+  await p.waitForTimeout(1500);
+  await p.screenshot({ path: join(OUT, 'loop_4_speaking_again.png') });
   await waitSeen(p, seen => seen.map(x => x.s).join('>').match(/speaking>.*speaking>ready$/));
+  await p.waitForTimeout(800);
+  await p.screenshot({ path: join(OUT, 'loop_5_ready.png') });
 });
 await step('hold to talk: listening while held, thinking when released', async () => {
   const talk = p.locator('.talk');
