@@ -1,0 +1,7 @@
+node_modules/
+.next/
+next-env.d.ts
+tsconfig.tsbuildinfo
+# synced from ../embed by scripts/sync-avatar.mjs
+public/avatar-kit/
+components/avatar/
