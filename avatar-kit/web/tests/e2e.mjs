@@ -35,6 +35,16 @@ async function open(w, h) {
 }
 const stateText = async p => { const v = await p.locator('.state-tag').getAttribute('data-state'); return v[0].toUpperCase() + v.slice(1); };
 const waitState = (p, s, ms = 60000) => p.waitForFunction(x => document.querySelector('.state-tag')?.getAttribute('data-state') === x.toLowerCase(), s, { timeout: ms });
+// the status changes faster than a polling check can see on a slow renderer, so record every change
+const track = p => p.evaluate(() => {
+  window.__seen = [];
+  const el = document.querySelector('.state-tag');
+  const push = () => window.__seen.push({ s: el.getAttribute('data-state'), speaking: window.__runtime.isSpeaking() });
+  push();
+  new MutationObserver(push).observe(el, { attributes: true, attributeFilter: ['data-state'] });
+});
+const seen = p => p.evaluate(() => window.__seen);
+const waitSeen = (p, fn, ms = 90000) => p.waitForFunction(f => new Function('seen', 'return (' + f + ')(seen)')(window.__seen), fn.toString(), { timeout: ms });
 const begin = async p => { await p.getByRole('button', { name: 'Press to begin' }).click({ timeout: 90000 }); await p.waitForSelector('.bar'); };
 
 const p = await open(1280, 800);
@@ -47,18 +57,19 @@ await step('begin: the bar, one word of status and no dashboard', async () => {
   await begin(p);
   assert.equal(await stateText(p), 'Ready');
   assert.equal(await p.locator('.bar').count(), 1);
-  assert.equal(await p.locator('.card, nav, aside:visible').count(), 0);
+  assert.equal(await p.locator('.card, nav, [role="tablist"]').count(), 0);
   await p.waitForTimeout(2500);
   await p.screenshot({ path: join(OUT, '02_ready.png') });
 });
 await step('typing a message: she thinks, speaks, and returns to ready; the transcript has both sides', async () => {
+  await track(p);
   await p.locator('#message').fill('Should I replace my head of sales?');
   await p.locator('#message').press('Enter');
-  await waitState(p, 'Thinking', 20000);
-  await p.screenshot({ path: join(OUT, '03_thinking.png') });
-  await waitState(p, 'Speaking', 30000);
+  await waitSeen(p, seen => seen.some(x => x.s === 'speaking'), 60000);
   await p.screenshot({ path: join(OUT, '04_speaking.png') });
-  await waitState(p, 'Ready', 90000);
+  await waitSeen(p, seen => seen.map(x => x.s).join('>').includes('speaking>ready'));
+  const order = (await seen(p)).map(x => x.s);
+  assert.ok(order.indexOf('thinking') >= 0 && order.indexOf('thinking') < order.indexOf('speaking'), 'thinking comes before speaking: ' + order.join('>'));
   await p.keyboard.press('t');
   await p.waitForSelector('.drawer.is-open');
   const lines = await p.locator('.line').allInnerTexts();
@@ -69,15 +80,16 @@ await step('typing a message: she thinks, speaks, and returns to ready; the tran
   await p.keyboard.press('Escape');
 });
 await step('interruption: sending while she speaks stops her and she answers the new message', async () => {
+  await track(p);
   await p.locator('#message').fill('Tell me what you think.');
   await p.locator('#message').press('Enter');
-  await waitState(p, 'Speaking', 40000);
+  await waitSeen(p, seen => seen.some(x => x.s === 'speaking'), 60000);
   await p.locator('#message').fill('Wait, one more thing.');
   await p.locator('#message').press('Enter');
-  await p.waitForFunction(() => ['listening', 'thinking'].includes(document.querySelector('.state-tag')?.getAttribute('data-state') ?? ''), null, { timeout: 20000 });
-  assert.equal(await p.evaluate(() => window.__runtime.isSpeaking()), false);
-  await waitState(p, 'Speaking', 40000);
-  await waitState(p, 'Ready', 90000);
+  await waitSeen(p, seen => { const i = seen.findIndex(x => x.s === 'speaking'); return seen.slice(i + 1).some(x => x.s === 'listening' || x.s === 'thinking'); }, 30000);
+  const all = await seen(p), i = all.findIndex(x => x.s === 'speaking'), after = all.slice(i + 1).find(x => x.s === 'listening' || x.s === 'thinking');
+  assert.equal(after.speaking, false, 'her voice stopped when the user interrupted');
+  await waitSeen(p, seen => seen.map(x => x.s).join('>').match(/speaking>.*speaking>ready$/));
 });
 await step('hold to talk: listening while held, thinking when released', async () => {
   const talk = p.locator('.talk');
