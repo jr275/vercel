@@ -1,0 +1,12 @@
+{
+  "name": "avatar-kit",
+  "private": true,
+  "version": "2.0.0",
+  "description": "Executive avatar runtime: a rigged GLB character with a conversation state machine, speech and lip-sync. Not part of the pnpm workspace.",
+  "scripts": {
+    "build": "node tools/build.js",
+    "pack:embed": "node tools/pack-embed.js",
+    "test:unit": "node --test tests/unit/*.test.js",
+    "test": "node tests/run-all.js"
+  }
+}

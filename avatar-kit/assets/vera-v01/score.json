@@ -1,0 +1,19 @@
+{
+  "reviewer": "Claude (this session), from the captured images in review/vera-v01. A development instrument, not a human review: a person must confirm or replace these numbers.",
+  "date": "2026-10-05",
+  "scale": "0 to 5 per category (3 is generic, not good); points = weight x score / 5",
+  "target": 75,
+  "weights": { "faceIndividuality": 20, "eyesGaze": 15, "skinMaterials": 15, "ageCredibility": 10, "hair": 10, "executivePresence": 15, "expressions": 10, "speakingAppearance": 5 },
+  "scores": { "faceIndividuality": 1, "eyesGaze": 2.5, "skinMaterials": 2, "ageCredibility": 1, "hair": 1.5, "executivePresence": 1.5, "expressions": 3, "speakingAppearance": 3 },
+  "notes": {
+    "faceIndividuality": "A clean, plain, default MPFB face. Nothing distinctive: no asymmetry beyond the base, no character in the structure.",
+    "eyesGaze": "Real iris texture, lashes, believable lids, and the existing gaze behaviour works. Brows are noisy dotted cards; the eyes are flat, without depth or moisture.",
+    "skinMaterials": "Textured and not waxy, but overexposed and pale under the key light, no subsurface response, and a hard cut-out line at the hairline.",
+    "ageCredibility": "Reads as early twenties. The source texture is literally named young_lightskinned_female. The brief asks for early-to-mid 40s.",
+    "hair": "A pulled-back ponytail card with a hard hairline. Not shoulder-length and not sophisticated.",
+    "executivePresence": "Black matte top reads as clean and neutral, but the A-pose, the plain face and the youth give no authority.",
+    "expressions": "The full ARKit rig works and all eight expressions show, but they are subtle on a plain face; skeptical and firm read, warm barely.",
+    "speakingAppearance": "Teeth and tongue are real and the mouth does not break the face. Mid-speech frames look slightly strained."
+  },
+  "hardFail": ["overly young woman", "generic default human (the MPFB sample base)", "reads closer to a game NPC than to an executive"]
+}

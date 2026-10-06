@@ -1,0 +1,19 @@
+<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>html,body{margin:0;height:100%;background:#000}#stage{position:absolute;inset:0}</style>
+<div id="stage"></div>
+<script src="../../vendor/three.min.js"></script>
+<script src="../../vendor/loaders/GLTFLoader.js"></script>
+<script src="../../vendor/libs/meshopt_decoder.js"></script>
+<script src="../../dist/avatar-kit.js"></script>
+<script>
+  AvatarKit.KTX2_PATH = '/vendor/libs/basis/';
+  const q = new URLSearchParams(location.search);
+  window.__errors = [];
+  window.__avatar = AvatarKit.createAvatar(document.getElementById('stage'), {
+    paused: true, quality: q.get('quality') || 'medium', shot: q.get('shot') || 'CLOSE', style: q.get('style') || 'conversation',
+    avatar: q.get('glb') ? { source: 'auto', url: q.get('glb') } : { source: 'procedural' }, adaptive: false
+  });
+  __avatar.on('error', e => __errors.push(e.code + ': ' + e.message));
+  __avatar.on('warning', e => __errors.push('warn ' + e.code + ': ' + e.message));
+  __avatar.ready.then(r => { window.__readyInfo = r; __avatar.advance(1.5); window.__ready = true; });
+</script>

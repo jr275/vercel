@@ -1,0 +1,22 @@
+{
+ "id": "HEAD-001",
+ "name": "First head from the selected vendor",
+ "vendor": "",
+ "sample": false,
+ "version": 0,
+ "state": "PENDING_ASSET",
+ "created": "2026-10-05",
+ "asset": null,
+ "rigMap": null,
+ "notes": "PENDING_ASSET: waiting for the first real GLB.",
+ "review": null,
+ "decision": null,
+ "history": [],
+ "log": [
+  {
+   "date": "2026-10-05",
+   "event": "created",
+   "state": "PENDING_ASSET"
+  }
+ ]
+}

@@ -1,0 +1,118 @@
+<!--THREE-->
+<title>Executive Avatar</title>
+<style>
+  :root { color-scheme: dark; --bg: #0b0b0e; --ink: #ece8e2; --mut: #8f8a93; --line: #262730; --acc: #cdbfae; --pan: rgba(16, 16, 20, .88); }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; overflow: hidden; }
+  #stage { position: fixed; inset: 0; }
+  #tag { position: fixed; left: 16px; top: 14px; font: 11px ui-monospace, monospace; letter-spacing: .08em; color: var(--mut); opacity: .75; pointer-events: none; max-width: calc(100vw - 80px); }
+  #tag b { color: #d9a45b; font-weight: 600; }
+  #devbtn { position: fixed; right: 14px; top: 12px; z-index: 5; background: var(--pan); color: var(--ink); border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; font: inherit; cursor: pointer; }
+  #dev { position: fixed; z-index: 4; top: 0; right: 0; bottom: 0; width: 320px; background: var(--pan); backdrop-filter: blur(10px); border-left: 1px solid var(--line); padding: 54px 16px 16px; overflow: auto; transform: translateX(0); transition: transform .25s; }
+  #dev[hidden] { display: block; transform: translateX(105%); }
+  h2 { font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--mut); margin: 16px 0 6px; font-weight: 600; }
+  .row { display: flex; flex-wrap: wrap; gap: 5px; }
+  button { background: #1b1c23; color: var(--ink); border: 1px solid var(--line); border-radius: 7px; padding: 6px 10px; font: inherit; cursor: pointer; }
+  button:hover { border-color: #444552; } button[aria-pressed="true"] { background: #2c2a26; border-color: var(--acc); color: #fff; }
+  button.primary { background: var(--acc); color: #17130f; border-color: var(--acc); font-weight: 600; } button.stop { color: #f0a0a0; }
+  textarea, input { width: 100%; background: #14151a; color: var(--ink); border: 1px solid var(--line); border-radius: 7px; padding: 7px 9px; font: inherit; resize: vertical; }
+  #dbg { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font: 11.5px ui-monospace, monospace; color: #bdb8c0; margin: 0; }
+  #dbg dt { color: var(--mut); } #dbg dd { margin: 0; word-break: break-word; }
+  #log { font: 11px ui-monospace, monospace; color: var(--mut); max-height: 110px; overflow: auto; margin: 0; padding: 0; list-style: none; }
+  #note { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); background: var(--pan); border: 1px solid var(--line); border-radius: 999px; padding: 7px 16px; color: var(--ink); opacity: 0; transition: opacity .3s; pointer-events: none; max-width: 80vw; text-align: center; }
+  #cap { position: fixed; left: 0; right: 0; bottom: 14px; text-align: center; font: 11px ui-monospace, monospace; letter-spacing: .14em; text-transform: uppercase; color: var(--mut); opacity: 0; pointer-events: none; }
+  #cap.on { opacity: .8; }
+  body.review #dev, body.review #devbtn, body.review #tag, body.review #note { display: none !important; }
+  #note.on { opacity: 1; }
+  @media (max-width: 700px) { #dev { top: auto; width: 100%; height: 56vh; border-left: 0; border-top: 1px solid var(--line); padding-top: 14px; } #dev[hidden] { transform: translateY(105%); } #tag { font-size: 10px; } }
+</style>
+<div id="stage"></div>
+<div id="tag"><b>DEVELOPMENT_PLACEHOLDER</b> · temporary character, not the production asset</div>
+<button id="devbtn" type="button" aria-expanded="true" aria-controls="dev">Dev</button>
+<aside id="dev" aria-label="Development controls">
+  <div class="row"><button id="run" class="primary" type="button">RUN DEMO</button><button id="runStop" class="stop" type="button">Stop demo</button></div>
+  <h2>State</h2><div class="row" id="stateRow"></div>
+  <div class="row" style="margin-top:6px"><button id="ptt" type="button" title="Hold: the user is talking. Release: she thinks, then answers (no AI backend: a canned reply)">Hold to talk</button><button id="interrupt" type="button">Interrupt</button></div>
+  <h2>Expression</h2><div class="row" id="exprRow"></div>
+  <h2>Camera</h2><div class="row" id="shotRow"></div>
+  <h2>Speech</h2>
+  <textarea id="text" rows="3" spellcheck="false"></textarea>
+  <div class="row" style="margin-top:6px"><button id="speak" class="primary" type="button">Speak</button><button id="stop" class="stop" type="button">Stop</button>
+    <select id="prov" style="background:#14151a;color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:6px"><option value="auto">voice: auto</option><option value="browser">browser voice</option><option value="synthetic">synthetic voice</option></select></div>
+  <h2>Debug</h2>
+  <dl id="dbg"></dl>
+  <h2>Log</h2><ul id="log"></ul>
+</aside>
+<div id="note" role="status"></div>
+<div id="cap" aria-hidden="true"></div>
+<script>/*KIT*/</script>
+<script>
+(function () {
+  var WA = AvatarKit, q = new URLSearchParams(location.search), $ = function (s) { return document.querySelector(s); };
+  var review = q.get('review') === 'vera', asset = q.get('glb') ? { url: q.get('glb'), role: q.get('role') || 'ASSET' } : undefined;
+  if (review) document.body.classList.add('review');
+  (review && !asset ? fetch('../assets/vera-v01/profile.json').then(function (r) { return r.json(); }).then(function (p) { return { url: '../assets/vera-v01/vera-v01-base.glb', role: 'VISUAL_PROTOTYPE', label: 'Vera v0.1', profile: p }; }) : Promise.resolve(asset)).then(boot);
+  function boot(asset) {
+  var ex = WA.createExecutiveAvatar($('#stage'), { asset: asset, paused: q.get('paused') === '1', speech: q.get('speech') || 'auto', quality: q.get('quality') || (matchMedia('(max-width:700px)').matches ? 'low' : 'medium') });
+  window.executive = ex;
+  function btn(row, label, fn, group) { var b = document.createElement('button'); b.type = 'button'; b.textContent = label; b.dataset.v = label; b.onclick = function () { fn(label); mark(row); }; $(row).appendChild(b); return b; }
+  function mark(row) { /* pressed state follows the real state, see refresh() */ }
+  ['Idle', 'Listening', 'Thinking', 'Speaking'].forEach(function (s) { btn('#stateRow', s, function () { ex.setState(s); }); });
+  ex.expressions.forEach(function (e) { btn('#exprRow', e[0].toUpperCase() + e.slice(1), function () { ex.setExpression(e); }); });
+  [['Close', 'CLOSE'], ['Medium-close', 'MEDIUM_CLOSE'], ['Medium', 'MEDIUM'], ['Full', 'FULL']].forEach(function (s) { btn('#shotRow', s[0], function () { ex.setShot(s[1]); }); });
+  $('#text').value = ex.demoText;
+  var note = $('#note'), noteT; function say(m) { note.textContent = m; note.classList.add('on'); clearTimeout(noteT); noteT = setTimeout(function () { note.classList.remove('on'); }, 2600); }
+  function log(m) { var li = document.createElement('li'); li.textContent = new Date().toLocaleTimeString() + ' ' + m; var l = $('#log'); l.insertBefore(li, l.firstChild); while (l.children.length > 40) l.removeChild(l.lastChild); }
+  ex.on('state', function (s) { log('state ' + s.from + ' -> ' + s.state + ' (' + s.event + ')'); });
+  ex.on('warning', function (w) { log('warning ' + w.code + ': ' + w.message); if (/ASSET|AUDIO|SPEECH_FALLBACK/.test(w.code)) say(w.message); });
+  ex.on('error', function (e) { log('ERROR ' + e.code + ': ' + e.message); });
+  ex.on('demostep', function (s) { log('demo ' + s); });
+  ex.on('speechstart', function () { log('speech start (' + ex.speechProvider() + ')'); }); ex.on('speechend', function (r) { log('speech end ' + (r.reason || 'ok')); });
+
+  $('#run').onclick = function () { ex.runDemo().then(function (r) { log('demo ' + (r.ok ? 'finished' : 'stopped')); }); };
+  $('#runStop').onclick = function () { ex.stopDemo(); ex.stopSpeaking(); ex.idle(); };
+  $('#speak').onclick = function () { ex.speak($('#text').value).then(function (r) { if (!r.ok && r.reason === 'error') say('Speech failed'); }, function (e) { say(e.message); }); };
+  $('#stop').onclick = function () { ex.stopDemo(); ex.stopSpeaking(); };
+  $('#prov').onchange = function () { log('speech provider: ' + ex.setSpeechProvider($('#prov').value)); };
+  $('#interrupt').onclick = function () { ex.userStartedSpeaking(); };
+
+  // push to talk: the user speaks (no microphone here, only the state), she thinks, then answers with a canned reply (no AI backend)
+  var replies = ["Understood. Before anything else, tell me what has to be true for this to be a good outcome.", "I hear the concern. The question is what you are not saying about it.", "Let's look at the decision itself, not the pressure around it."], ri = 0, pttTimer;
+  var ptt = $('#ptt');
+  ptt.addEventListener('pointerdown', function (e) { e.preventDefault(); clearTimeout(pttTimer); ex.stopDemo(); ex.userStartedSpeaking(); ptt.setAttribute('aria-pressed', 'true'); });
+  function release() { if (ptt.getAttribute('aria-pressed') !== 'true') return; ptt.setAttribute('aria-pressed', 'false'); ex.userStoppedSpeaking(); pttTimer = setTimeout(function () { ex.speak(replies[ri++ % replies.length]); }, 1500); }
+  ptt.addEventListener('pointerup', release); ptt.addEventListener('pointerleave', release);
+
+  var dev = $('#dev'), devbtn = $('#devbtn');
+  function showDev(on) { dev.hidden = !on; devbtn.setAttribute('aria-expanded', String(on)); }
+  devbtn.onclick = function () { showDev(dev.hidden); }; showDev(!matchMedia('(max-width:700px)').matches && q.get('dev') !== '0');
+  if (q.get('dev') === '0') devbtn.style.display = 'none';
+
+  function refresh() {
+    var i; try { i = ex.info(); } catch (e) { return; }
+    var rows = [['fps', i.fps + (/swiftshader|software/i.test((ex.stats().model && ex.stats().model.renderer) || '') ? ' (software)' : '')], ['state', i.state + (i.state === 'TRANSITION' ? ' -> ' + i.target : '')], ['expression', i.expression], ['cognitive', i.cognitive || 'none'], ['animation', i.animation], ['speaking', i.speaking ? 'yes (' + i.provider + ')' : 'no'], ['shot', i.shot],
+      ['asset', i.asset.role + ' · ' + (i.asset.loaded || 'loading') + (i.asset.fallback ? ' (fallback)' : '')], ['morph targets', i.rig.morphTargets ? 'yes' : 'no' + (i.rig.kind === 'procedural' ? ' (procedural: bones and shapes)' : '')], ['visemes', i.rig.visemes ? 'native' : 'approximated'], ['eyes / jaw / body', [i.rig.eyes, i.rig.jaw, i.rig.body].map(function (b) { return b ? 'y' : 'n'; }).join(' / ')]];
+    $('#dbg').innerHTML = rows.map(function (r) { return '<dt>' + r[0] + '</dt><dd>' + String(r[1]).replace(/[<>&]/g, '') + '</dd>'; }).join('');
+    document.querySelectorAll('#stateRow button').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.v.toUpperCase() === i.target)); });
+    document.querySelectorAll('#exprRow button').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.v.toLowerCase() === (window.__lastExpr || ''))); });
+    document.querySelectorAll('#shotRow button').forEach(function (b) { b.setAttribute('aria-pressed', String(({ Close: 'CLOSE', 'Medium-close': 'MEDIUM_CLOSE', Medium: 'MEDIUM', Full: 'FULL' })[b.dataset.v] === i.shot)); });
+  }
+  ex.on('expression', function (n) { window.__lastExpr = n; });
+  setInterval(refresh, 250);
+
+  /* review mode: the character and almost nothing else. 1 close, 2 medium-close, 3 full, c expression comparison, s speaking test, r 1.5 s test */
+  var cap = $('#cap'), EXPR = ['neutral', 'focused', 'skeptical', 'firm', 'warm'];
+  function caption(t) { cap.textContent = t || ''; cap.classList.toggle('on', !!t); }
+  window.veraReview = {
+    close: function () { return ex.setShot('CLOSE', { style: 'intimate' }); }, mediumClose: function () { return ex.setShot('MEDIUM_CLOSE', { style: 'executive' }); }, full: function () { return ex.setShot('FULL', { style: 'executive' }); },
+    compare: async function (hold) { hold = hold || 2400; for (var i = 0; i < EXPR.length; i++) { ex.setExpression(EXPR[i]); caption(EXPR[i]); await new Promise(function (r) { setTimeout(r, hold); }); } caption(''); ex.setExpression('neutral'); },
+    speak: function () { return ex.runDemo(); }, presence: function () { return ex.runPresenceTest(); }, expressions: EXPR
+  };
+  if (review) {
+    addEventListener('keydown', function (e) { var k = e.key; if (k === '1') veraReview.close(); else if (k === '2') veraReview.mediumClose(); else if (k === '3') veraReview.full(); else if (k === 'c') veraReview.compare(); else if (k === 's') veraReview.speak(); else if (k === 'r') veraReview.presence(); });
+    if (q.get('compare') === '1') ex.ready.then(function () { veraReview.compare(); });
+  }
+  ex.ready.then(function () { refresh(); window.__executiveReady = true; if (review && q.get('paused') !== '1') ex.runPresenceTest(); });
+  }
+})();
+</script>
