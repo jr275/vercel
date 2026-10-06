@@ -33,8 +33,8 @@ async function open(w, h) {
   await p.goto(`${base}/?debug`, { waitUntil: 'domcontentloaded' });
   return p;
 }
-const stateText = p => p.locator('.state-tag span').first().innerText();
-const waitState = (p, s, ms = 60000) => p.waitForFunction(x => document.querySelector('.state-tag span')?.textContent === x, s, { timeout: ms });
+const stateText = async p => { const v = await p.locator('.state-tag').getAttribute('data-state'); return v[0].toUpperCase() + v.slice(1); };
+const waitState = (p, s, ms = 60000) => p.waitForFunction(x => document.querySelector('.state-tag')?.getAttribute('data-state') === x.toLowerCase(), s, { timeout: ms });
 const begin = async p => { await p.getByRole('button', { name: 'Press to begin' }).click({ timeout: 90000 }); await p.waitForSelector('.bar'); };
 
 const p = await open(1280, 800);
@@ -74,7 +74,7 @@ await step('interruption: sending while she speaks stops her and she answers the
   await waitState(p, 'Speaking', 40000);
   await p.locator('#message').fill('Wait, one more thing.');
   await p.locator('#message').press('Enter');
-  await p.waitForFunction(() => ['Listening', 'Thinking'].includes(document.querySelector('.state-tag span')?.textContent ?? ''), null, { timeout: 20000 });
+  await p.waitForFunction(() => ['listening', 'thinking'].includes(document.querySelector('.state-tag')?.getAttribute('data-state') ?? ''), null, { timeout: 20000 });
   assert.equal(await p.evaluate(() => window.__runtime.isSpeaking()), false);
   await waitState(p, 'Speaking', 40000);
   await waitState(p, 'Ready', 90000);
@@ -126,7 +126,6 @@ await step('mobile 390 px: no horizontal overflow, the bar sits inside the scree
   assert.ok(r.sw <= r.cw, 'no horizontal scroll');
   assert.ok(r.bar.left >= 0 && r.bar.right <= r.cw && r.bar.bottom <= r.h);
   await m.screenshot({ path: join(OUT, '09_mobile.png') });
-  await m.keyboard.press('t').catch(() => {});
   await m.getByRole('button', { name: /Transcript/ }).click();
   await m.waitForSelector('.drawer.is-open');
   await m.screenshot({ path: join(OUT, '10_mobile_transcript.png') });
