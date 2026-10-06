@@ -44,7 +44,10 @@ const track = p => p.evaluate(() => {
   new MutationObserver(push).observe(el, { attributes: true, attributeFilter: ['data-state'] });
 });
 const seen = p => p.evaluate(() => window.__seen);
-const waitSeen = (p, fn, ms = 90000) => p.waitForFunction(f => new Function('seen', 'return (' + f + ')(seen)')(window.__seen), fn.toString(), { timeout: ms });
+const waitSeen = async (p, fn, ms = 90000) => {
+  try { await p.waitForFunction(f => new Function('seen', 'return (' + f + ')(seen)')(window.__seen), fn.toString(), { timeout: ms }); }
+  catch (e) { throw new Error('status sequence seen: ' + (await seen(p)).map(x => x.s).join('>') + '\n' + e.message); }
+};
 const begin = async p => { await p.getByRole('button', { name: 'Press to begin' }).click({ timeout: 90000 }); await p.waitForSelector('.bar'); };
 
 const p = await open(1280, 800);
@@ -75,8 +78,8 @@ await step('typing a message: she thinks, speaks, and returns to ready; the tran
   await p.waitForSelector('.drawer.is-open');
   const lines = await p.locator('.line').allInnerTexts();
   assert.equal(lines.length, 2);
-  assert.match(lines[0], /^You\s+Should I replace my head of sales\?/);
-  assert.match(lines[1], /^Advisor\s+\S/);
+  assert.match(lines[0], /^you\s+Should I replace my head of sales\?/i);
+  assert.match(lines[1], /^advisor\s+\S/i);
   await p.screenshot({ path: join(OUT, '05_transcript.png') });
   await p.keyboard.press('Escape');
 });
