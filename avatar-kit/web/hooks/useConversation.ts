@@ -1,33 +1,27 @@
 'use client';
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AvatarRuntime, ConversationState } from '@/components/avatar/ExecutiveAvatar';
+import { createConversation } from '@/lib/vera/conversation.mjs';
+import { createRemoteBrain, remoteAlert } from '@/lib/vera/remote.mjs';
+import { BrowserSpeechInput, FakeSpeechInput } from '@/lib/vera/speech-input.mjs';
+import { RuntimeVoice } from '@/lib/vera/voice.mjs';
 
 export type Line = { id: number; role: 'you' | 'her'; text: string };
 export type UiState = 'Ready' | 'Listening' | 'Thinking' | 'Speaking';
 
-// Canned replies. No backend: replace `reply()` with a call to a real model and keep the rest.
-const REPLIES = [
-  'Understood. Before anything else, tell me what has to be true for this to be a good outcome.',
-  'I hear the concern. The question is what you are not saying about it.',
-  "Let's look at the decision itself, not the pressure around it.",
-  'That is the story. Now tell me what actually happened.',
-  'You already know the answer. What is stopping you from acting on it?',
-  'Slow down. Which part of this is a fact, and which part is a fear?',
-];
-
-const LABEL: Record<ConversationState, UiState> = {
-  IDLE: 'Ready',
-  LISTENING: 'Listening',
-  THINKING: 'Thinking',
-  SPEAKING: 'Speaking',
-  INTERRUPTED: 'Listening',
-  TRANSITION: 'Ready',
-  ERROR: 'Ready',
+const LABEL: Record<string, UiState> = { READY: 'Ready', LISTENING: 'Listening', INTERRUPTED: 'Listening', THINKING: 'Thinking', SPEAKING: 'Speaking' };
+const MIC_MESSAGE: Record<string, string> = {
+  permission_denied: 'Microphone access was blocked. You can type instead.',
+  unsupported: 'Speech recognition is not available in this browser. You can type instead.',
+  network: 'Speech recognition lost its connection. Try again, or type.',
+  no_speech: 'I did not hear anything. Try again.',
 };
 
 /**
- * Owns the conversation: the transcript, the state shown to the user, and the order of events
- * (user speaks, she thinks, she answers, the user may interrupt). The 3D character is driven only through the runtime contract.
+ * Wires the layers together for the browser:
+ *   mic/text -> Conversation runtime -> remote Executive Brain (/api/vera) -> Voice -> Avatar runtime.
+ * The hook holds only UI state. The turn-taking logic lives in lib/vera/conversation.mjs.
  */
 export function useConversation(getRuntime: () => AvatarRuntime | null) {
   const [lines, setLines] = useState<Line[]>([]);
@@ -35,90 +29,105 @@ export function useConversation(getRuntime: () => AvatarRuntime | null) {
   const [caption, setCaption] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [talking, setTalking] = useState(false);
-  const turn = useRef(0);
   const next = useRef(0);
-  const last = useRef('');
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const captionsOn = useRef(false);
+  const lastReply = useRef('');
+  const parts = useRef<{ convo: any; input: any; voice: any; fake: boolean } | null>(null);
 
-  const add = useCallback((role: Line['role'], text: string) => setLines(l => [...l, { id: next.current++, role, text }]), []);
-  const clearTimer = () => {
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = null;
-  };
+  if (!parts.current && typeof window !== 'undefined') {
+    const fake = new URLSearchParams(window.location.search).has('fakemic');
+    const input: any = fake ? new FakeSpeechInput() : new BrowserSpeechInput();
+    const voice: any = new RuntimeVoice(getRuntime);
+    const convo: any = createConversation({ brain: createRemoteBrain(), voice, input, minThinkMs: 700 });
+    parts.current = { convo, input, voice, fake };
+  }
 
-  const onState = useCallback((s: ConversationState) => setUi(LABEL[s] ?? 'Ready'), []);
-
-  const respond = useCallback(
-    (spoken: boolean) => {
-      const rt = getRuntime();
-      if (!rt) return;
-      const my = ++turn.current;
-      const reply = REPLIES[(next.current + (spoken ? 1 : 0)) % REPLIES.length];
-      clearTimer();
-      timer.current = setTimeout(async () => {
-        if (my !== turn.current) return;
-        add('her', reply);
-        if (captionsOn.current) setCaption(reply);
-        last.current = reply;
-        const res = await rt.speak(reply);
-        if (my !== turn.current) return;
-        setCaption('');
-        if (!res.ok && res.reason === 'error') setError('I could not speak. Try again.');
-      }, 1100 + Math.random() * 900);
-    },
-    [add, getRuntime]
-  );
+  useEffect(() => {
+    const p = parts.current;
+    if (!p) return;
+    const { convo, input, fake } = p;
+    const rt = () => getRuntime();
+    const offs = [
+      convo.on('state', ({ state, from }: { state: string; from: string }) => {
+        setUi(LABEL[state] ?? 'Ready');
+        const r = rt();
+        if (!r) return;
+        if (state === 'LISTENING' || state === 'INTERRUPTED') r.userStartedSpeaking();
+        else if (state === 'THINKING') {
+          if (r.getState() !== 'LISTENING' && r.getState() !== 'INTERRUPTED') r.userStartedSpeaking();
+          r.userStoppedSpeaking();
+        } else if (state === 'READY' && (from === 'LISTENING' || from === 'INTERRUPTED' || from === 'THINKING')) r.setState('IDLE');
+      }),
+      convo.on('line', (l: { role: string; text: string }) => setLines(ls => [...ls, { id: next.current++, role: l.role === 'you' ? 'you' : 'her', text: l.text }])),
+      convo.on('reply', (r: { text: string }) => {
+        lastReply.current = r.text;
+        if (captionsOn.current) setCaption(r.text);
+      }),
+      convo.on('alert', (a: { text: string }) => {
+        lastReply.current = a.text;
+        if (captionsOn.current) setCaption(a.text);
+      }),
+      convo.on('spoken', () => setCaption('')),
+      convo.on('interrupted', () => setCaption('')),
+      convo.on('error', (e: { stage: string }) => setError(e.stage === 'voice' ? 'I could not speak. Try again.' : 'I could not reach my assistant brain. Try again.')),
+      convo.on('input_error', (e: { code: string; message: string }) => {
+        setTalking(false);
+        setError(MIC_MESSAGE[e.code] ?? e.message);
+      }),
+    ];
+    if (new URLSearchParams(window.location.search).has('debug') || fake) {
+      (window as any).__vera = {
+        convo,
+        input,
+        /** Deliver a proactive alert that the server produced (used by the e2e and the review tools). */
+        alert: (a: { text: string }) => convo.alert(remoteAlert(a)),
+      };
+    }
+    return () => offs.forEach((f: () => void) => f());
+  }, [getRuntime]);
 
   /** Typed message. If she is speaking, the user interrupts her first. */
-  const send = useCallback(
-    (text: string) => {
-      const t = text.trim();
-      const rt = getRuntime();
-      if (!t || !rt) return;
-      setError(null);
-      setCaption('');
-      add('you', t);
-      rt.userStartedSpeaking();
-      rt.userStoppedSpeaking();
-      respond(false);
-    },
-    [add, getRuntime, respond]
-  );
+  const send = useCallback((text: string) => {
+    setError(null);
+    setCaption('');
+    void parts.current?.convo.submit(text);
+  }, []);
 
-  /** Push to talk: no microphone yet, only the state. Holding listens, releasing starts the reply. */
+  /** Push to talk: the speech recogniser listens while held. */
   const talkStart = useCallback(() => {
-    const rt = getRuntime();
-    if (!rt) return;
-    turn.current++;
-    clearTimer();
+    const p = parts.current;
+    if (!p) return;
     setError(null);
     setCaption('');
     setTalking(true);
-    rt.userStartedSpeaking();
-  }, [getRuntime]);
+    p.convo.listen();
+    void p.input.start().then(() => p.fake && p.input.say());
+  }, []);
 
   const talkEnd = useCallback(() => {
-    const rt = getRuntime();
+    const p = parts.current;
     setTalking(false);
-    if (!rt) return;
-    add('you', 'Spoken message');
-    rt.userStoppedSpeaking();
-    respond(true);
-  }, [add, getRuntime, respond]);
+    if (!p) return;
+    if (p.fake) {
+      // deterministic stand-in for speech: the e2e sets window.__fakemicText
+      p.input.final((window as any).__fakemicText ?? 'What is on my calendar');
+      p.input.stop();
+    } else p.input.stop();
+  }, []);
 
   const retry = useCallback(() => {
-    const rt = getRuntime();
     setError(null);
-    if (rt && last.current) void rt.speak(last.current);
-  }, [getRuntime]);
+    const p = parts.current;
+    if (p && lastReply.current) void p.voice.speak(lastReply.current).catch(() => setError('I could not speak. Try again.'));
+  }, []);
 
   const setCaptions = useCallback((on: boolean) => {
     captionsOn.current = on;
     if (!on) setCaption('');
   }, []);
 
-  useEffect(() => () => clearTimer(), []);
+  // The avatar runtime still reports its own state; the tag follows the conversation instead.
+  const onState = useCallback((_s: ConversationState) => {}, []);
 
   return { lines, ui, caption, error, talking, send, talkStart, talkEnd, retry, onState, setCaptions, setError };
 }

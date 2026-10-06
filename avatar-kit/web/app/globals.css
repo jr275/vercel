@@ -88,3 +88,20 @@ button { cursor: pointer; }
   .captions { font-size: 16px; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition-duration: 0.01ms !important; } }
+
+/* ?review=executive — intentionally plain */
+.rv{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;padding:16px;font:13px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;color:#e8e8ea;background:#111;min-height:100dvh;overflow:auto;position:absolute;inset:0}
+.rv header{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.rv h2{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#9a9aa3;margin:14px 0 4px}
+.rv-tag{border:1px solid #3a3a42;padding:1px 6px;border-radius:3px}
+.rv-lines{list-style:none;margin:0;padding:0;max-height:46dvh;overflow:auto}
+.rv-lines li{padding:4px 0;border-bottom:1px solid #222}
+.rv-lines .who{color:#8ab4ff;margin-right:6px}.rv-lines .you .who{color:#9a9aa3}
+.rv-lines .partial{opacity:.55}
+.rv-note{color:#e8c46a;margin:6px 0}.rv-confirm{background:#2a2412;padding:8px;border:1px solid #6a5a22;margin:6px 0}
+.rv form{display:flex;gap:6px;margin-top:8px}.rv input{flex:1;min-width:0;background:#1b1b1f;color:inherit;border:1px solid #3a3a42;padding:6px 8px;font:inherit}
+.rv button{background:#222228;color:inherit;border:1px solid #3a3a42;padding:5px 8px;font:inherit;cursor:pointer}
+.rv-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.rv dl{margin:0}.rv dt{color:#9a9aa3;font-size:11px}.rv dd{margin:0 0 6px;word-break:break-word}
+.rv-trace{margin:0;padding-left:18px}.rv-trace li{margin:2px 0}.rv-small{margin:0;padding-left:16px;font-size:12px;color:#c4c4cc}
+@media (max-width:800px){.rv{grid-template-columns:1fr}}

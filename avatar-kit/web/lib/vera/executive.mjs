@@ -20,6 +20,7 @@ export function createExecutive({ memory, calendar, email, news, now = () => Dat
     return r;
   }
 
+  let last = null;
   async function briefing() {
     pipeline.reset();
     const events = await gatherEvents({ memory, calendar, email, news, now });
@@ -27,7 +28,7 @@ export function createExecutive({ memory, calendar, email, news, now = () => Dat
     for (const e of events) runs.push(await ingest(e));
     const notifications = runs.map(r => r.notification).filter(Boolean);
     const next = (await calendar.list({ from: now(), to: now() + DAY }))[0] ?? null;
-    return { ...synthesize(notifications, { now: now(), firstMeeting: next }), traces: runs.map(r => ({ status: r.status, trace: r.trace })), notifications };
+    return (last = { ...synthesize(notifications, { now: now(), firstMeeting: next }), traces: runs.map(r => ({ status: r.status, trace: r.trace })), notifications });
   }
 
   return {
@@ -35,6 +36,7 @@ export function createExecutive({ memory, calendar, email, news, now = () => Dat
     briefing,
     alerts,
     traces,
+    lastBriefing: () => last,
     surfaced: () => alerts.filter(a => a.decision === 'SURFACE_NOW'),
     onAlert: f => (listeners.add(f), () => listeners.delete(f)),
     resetAlerts: () => (alerts.length = 0),

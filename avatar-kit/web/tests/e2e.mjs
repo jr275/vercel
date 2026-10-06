@@ -24,13 +24,13 @@ const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--ena
 let failed = 0;
 const step = async (name, fn) => { try { await fn(); console.log('ok  ', name); } catch (e) { failed++; console.log('FAIL', name, '\n    ', String(e.message).split('\n')[0]); } };
 
-async function open(w, h) {
+async function open(w, h, path = '?debug&fakemic') {
   const p = await browser.newPage({ viewport: { width: w, height: h } });
   p.errors = [];
   p.on('pageerror', e => p.errors.push('pageerror: ' + e.message));
   p.on('console', m => { if (m.type() === 'error' && !/fonts\.g|ERR_|Failed to load resource/.test(m.text())) p.errors.push(m.text()); });
   await p.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
-  await p.goto(`${base}/?debug`, { waitUntil: 'domcontentloaded' });
+  await p.goto(`${base}/${path}`, { waitUntil: 'domcontentloaded' });
   return p;
 }
 const stateText = async p => { const v = await p.locator('.state-tag').getAttribute('data-state'); return v[0].toUpperCase() + v.slice(1); };
@@ -66,7 +66,7 @@ await step('begin: the bar, one word of status and no dashboard', async () => {
 });
 await step('typing a message: she thinks, speaks, and returns to ready; the transcript has both sides', async () => {
   await track(p);
-  await p.locator('#message').fill('Should I replace my head of sales?');
+  await p.locator('#message').fill('What is on my calendar?');
   await p.locator('#message').press('Enter');
   await waitSeen(p, seen => seen.some(x => x.s === 'speaking'), 60000);
   await p.screenshot({ path: join(OUT, '04_speaking.png') });
@@ -78,20 +78,20 @@ await step('typing a message: she thinks, speaks, and returns to ready; the tran
   await p.waitForSelector('.drawer.is-open');
   const lines = await p.locator('.line').allInnerTexts();
   assert.equal(lines.length, 2);
-  assert.match(lines[0], /^you\s+Should I replace my head of sales\?/i);
-  assert.match(lines[1], /^advisor\s+\S/i);
+  assert.match(lines[0], /^you\s+What is on my calendar\?/i);
+  assert.match(lines[1], /^advisor\s+.*Investor update/i);
   await p.screenshot({ path: join(OUT, '05_transcript.png') });
   await p.keyboard.press('Escape');
 });
 await step('interruption: sending while she speaks stops her and she answers the new message', async () => {
   await p.screenshot({ path: join(OUT, 'loop_1_ready.png') });
   await track(p);
-  await p.locator('#message').fill('Tell me what you think.');
+  await p.locator('#message').fill('Give me the morning briefing');
   await p.locator('#message').press('Enter');
   await waitSeen(p, seen => seen.some(x => x.s === 'speaking'), 60000);
   await p.waitForTimeout(1500);
   await p.screenshot({ path: join(OUT, 'loop_2_speaking.png') });
-  await p.locator('#message').fill('Wait, one more thing.');
+  await p.locator('#message').fill('Wait, what do you know about Carlos?');
   await p.locator('#message').press('Enter');
   await waitSeen(p, seen => { const i = seen.findIndex(x => x.s === 'speaking'); return seen.slice(i + 1).some(x => x.s === 'listening' || x.s === 'thinking'); }, 30000);
   const all = await seen(p), i = all.findIndex(x => x.s === 'speaking'), after = all.slice(i + 1).find(x => x.s === 'listening' || x.s === 'thinking');
@@ -115,7 +115,36 @@ await step('hold to talk: listening while held, thinking when released', async (
   await waitState(p, 'Thinking', 20000);
   await waitState(p, 'Ready', 120000);
 });
+await step('barge-in by voice (fake microphone): she stops mid-sentence, remembers only what she said, and answers the new request', async () => {
+  await track(p);
+  await p.locator('#message').fill('Give me the morning briefing');
+  await p.locator('#message').press('Enter');
+  await waitSeen(p, seen => seen.some(x => x.s === 'speaking'), 90000);
+  await p.waitForTimeout(1200);
+  await p.evaluate(() => { const i = window.__vera.input; i.say(); i.partial('what do'); i.final('what do you know about Carlos'); });
+  await waitSeen(p, seen => { const i = seen.findIndex(x => x.s === 'speaking'); return seen.slice(i + 1).some(x => x.s === 'thinking'); }, 30000);
+  assert.equal(await p.evaluate(() => window.__runtime.isSpeaking()), false, 'her voice stopped');
+  await waitSeen(p, seen => seen.map(x => x.s).join('>').match(/speaking>.*thinking>speaking>ready$/), 150000);
+  const last = await p.evaluate(() => window.__vera.convo.transcript.filter(l => l.role === 'vera').at(-1).text);
+  assert.match(last, /Carlos Mendes, Head of Commercial/);
+  const st = await fetch(base + '/api/vera').then(r => r.json());
+  assert.ok(st.state.pending, 'server is consistent');
+});
+await step('proactive alert: a server-side email event becomes a spoken alert in the main app', async () => {
+  const r = await p.evaluate(async () => {
+    const res = await fetch('/api/vera', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'event', preset: 'carlos_email' }) }).then(x => x.json());
+    window.__vera.alert(res.announcement);
+    return { status: res.status, cls: res.notification.classification, stages: res.trace.map(t => t.stage) };
+  });
+  assert.equal(r.cls, 'URGENT');
+  assert.equal(r.stages.length, 9);
+  await p.waitForFunction(() => window.__vera.convo.transcript.some(l => l.proactive), null, { timeout: 30000 });
+  const txt = await p.evaluate(() => window.__vera.convo.transcript.find(l => l.proactive).text);
+  assert.match(txt, /^Carlos just wrote about the pricing decision and marked it urgent\./);
+  await waitState(p, 'Ready', 150000);
+});
 await step('presence mode hides everything but her; Esc brings the interface back', async () => {
+  await p.evaluate(() => document.activeElement?.blur());
   await p.keyboard.press('p');
   await p.waitForSelector('.app.is-presence');
   await p.waitForTimeout(600);
@@ -142,6 +171,36 @@ await step('settings: framing changes the camera, captions show her words, voice
 });
 await step('no console or page errors on desktop', async () => { assert.deepEqual(p.errors, []); });
 await p.close();
+
+const rv = await open(1280, 900, '?review=executive&fakemic');
+await step('?review=executive: briefing, proactive alert with trace, memory, tool use and confirmation gate', async () => {
+  await rv.getByTestId('rv-brief').waitFor({ timeout: 30000 });
+  await rv.getByRole('button', { name: 'Reset' }).click();
+  await rv.getByTestId('rv-brief').click();
+  await rv.waitForFunction(() => /three things I think you should know/.test(document.querySelector('[data-testid=rv-lines]')?.textContent ?? ''), null, { timeout: 30000 });
+  await rv.waitForFunction(() => document.querySelector('[data-testid=rv-conv]')?.textContent === 'READY', null, { timeout: 30000 });
+  assert.match(await rv.getByTestId('rv-signals').innerText(), /email: Pricing decision is urgent → URGENT/);
+  assert.match(await rv.getByTestId('rv-cognitive').innerText(), /EXECUTIVE_INTENT[\s\S]*briefing/);
+  assert.match(await rv.getByTestId('rv-pending').innerText(), /offer: Prepare the briefing/);
+  await rv.getByTestId('rv-inject-carlos').click();
+  await rv.waitForFunction(() => /Carlos just wrote about the pricing decision/.test(document.querySelector('[data-testid=rv-lines]')?.textContent ?? ''), null, { timeout: 30000 });
+  const trace = await rv.getByTestId('rv-trace').innerText();
+  for (const stage of ['EVENT', 'INGESTION', 'NORMALIZATION', 'RELEVANCE', 'CONTEXT', 'IMPORTANCE', 'DECISION', 'NOTIFICATION', 'OPTIONAL ACTION']) assert.ok(trace.includes(stage), stage);
+  await rv.waitForFunction(() => document.querySelector('[data-testid=rv-conv]')?.textContent === 'READY', null, { timeout: 30000 });
+  await rv.locator('#rv-input').fill('remember that Carlos prefers calls over email');
+  await rv.locator('#rv-input').press('Enter');
+  await rv.waitForFunction(() => /I will remember that Carlos prefers calls over email/.test(document.querySelector('[data-testid=rv-lines]')?.textContent ?? ''), null, { timeout: 30000 });
+  await rv.locator('#rv-input').fill('email Carlos saying the pricing call moves to Friday');
+  await rv.locator('#rv-input').press('Enter');
+  await rv.getByTestId('rv-confirm').waitFor({ timeout: 30000 });
+  assert.match(await rv.getByTestId('rv-outbox').innerText(), /nothing sent/);
+  await rv.waitForFunction(() => document.querySelector('[data-testid=rv-conv]')?.textContent === 'READY', null, { timeout: 30000 });
+  await rv.getByRole('button', { name: 'Confirm' }).click();
+  await rv.waitForFunction(() => /Carlos Mendes: the pricing call moves to Friday/.test(document.querySelector('[data-testid=rv-outbox]')?.textContent ?? ''), null, { timeout: 30000 });
+  await rv.screenshot({ path: join(OUT, '11_review_executive.png') });
+  assert.deepEqual(rv.errors, []);
+});
+await rv.close();
 
 const m = await open(390, 844);
 await step('mobile 390 px: no horizontal overflow, the bar sits inside the screen, no errors', async () => {

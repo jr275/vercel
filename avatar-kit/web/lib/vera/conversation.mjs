@@ -5,16 +5,16 @@
 //   barge-in while THINKING  -> brain call aborted                                  -> INTERRUPTED
 //   final transcript         -> THINKING -> SPEAKING -> READY
 //   interruption with no follow-up (silence/cough) -> recovered to READY
-import { createEmitter, isAbort } from './util.mjs';
+import { createEmitter, isAbort, sleep } from './util.mjs';
 
 export const CONVERSATION_STATES = ['READY', 'LISTENING', 'THINKING', 'SPEAKING', 'INTERRUPTED'];
 
 /**
  * @param {{ brain: { respond(text:string,o:{signal:AbortSignal}):Promise<any>, announce?(n:any):any, noteInterrupted?(s:string):void },
  *           voice: { speak(text:string,o:{signal:AbortSignal}):Promise<{completed:boolean,spoken:string}>, stop():string },
- *           input?: any }} deps
+ *           input?: any, minThinkMs?: number }} deps
  */
-export function createConversation({ brain, voice, input = null }) {
+export function createConversation({ brain, voice, input = null, minThinkMs = 0 }) {
   const bus = createEmitter();
   let state = 'READY';
   let turn = 0;
@@ -59,7 +59,9 @@ export function createConversation({ brain, voice, input = null }) {
     set('THINKING');
     let reply;
     try {
+      const t0 = Date.now();
       reply = await brain.respond(text, { signal });
+      if (minThinkMs > Date.now() - t0) await sleep(minThinkMs - (Date.now() - t0), signal); // a beat of thought, never an instant reply
     } catch (e) {
       if (isAbort(e) || my !== turn) return bus.emit('cancelled', { text });
       bus.emit('error', { stage: 'brain', error: e });
@@ -119,6 +121,11 @@ export function createConversation({ brain, voice, input = null }) {
       flush();
     },
     interrupt: bargeIn,
+    /** The user took the floor (push-to-talk press, or the recogniser heard speech). */
+    listen() {
+      gotFinal = false;
+      if (!bargeIn() && state === 'READY') set('LISTENING');
+    },
     pendingAlerts: () => queue.length,
     async startListening() {
       if (!input) return false;
@@ -130,10 +137,7 @@ export function createConversation({ brain, voice, input = null }) {
   };
 
   if (input) {
-    input.on('speechstart', () => {
-      gotFinal = false;
-      if (!bargeIn() && (state === 'READY' || state === 'INTERRUPTED')) set(state === 'INTERRUPTED' ? 'INTERRUPTED' : 'LISTENING');
-    });
+    input.on('speechstart', () => api.listen());
     input.on('partial', ({ text }) => bus.emit('partial', { text }));
     input.on('final', ({ text }) => {
       bus.emit('final', { text });

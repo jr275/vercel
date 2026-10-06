@@ -8,10 +8,19 @@ import { StartGate } from '@/components/StartGate';
 import { StateTag } from '@/components/StateTag';
 import { TranscriptDrawer } from '@/components/TranscriptDrawer';
 import { useConversation } from '@/hooks/useConversation';
+import { ExecutiveReview } from '@/components/review/ExecutiveReview';
 
 const isTyping = (t: EventTarget | null) => t instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName);
 
+/** ?review=executive swaps the avatar for a plain console that judges the assistant, not the visuals. */
 export default function Page() {
+  const [review, setReview] = useState<boolean | null>(null);
+  useEffect(() => setReview(new URLSearchParams(window.location.search).get('review') === 'executive'), []);
+  if (review === null) return <main className="app" />;
+  return review ? <ExecutiveReview /> : <App />;
+}
+
+function App() {
   const avatar = useRef<ExecutiveAvatarHandle>(null);
   const getRuntime = useCallback((): AvatarRuntime | null => avatar.current?.runtime ?? null, []);
   const convo = useConversation(getRuntime);

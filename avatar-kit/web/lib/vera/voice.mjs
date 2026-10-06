@@ -135,3 +135,36 @@ export class RuntimeVoice {
     return this._spoken.join(' ');
   }
 }
+
+/** A voice with no sound: renders the speech plan as timed text. Used by the review console and anywhere audio is not wanted. */
+export class TextVoice {
+  constructor({ msPerSegment = 140 } = {}) {
+    Object.assign(this, createEmitter(), { id: 'text', msPerSegment, speaking: false, _spoken: [], _stopped: false });
+  }
+  async speak(text, { signal } = {}) {
+    const segments = planSpeech(text);
+    this._stopped = false;
+    this._spoken = [];
+    this.speaking = true;
+    try {
+      for (const seg of segments) {
+        if (this._stopped) break;
+        await new Promise(res => {
+          this._wake = res;
+          setTimeout(res, this.msPerSegment);
+        });
+        if (this._stopped || signal?.aborted) break;
+        this._spoken.push(seg.text);
+        this.emit('segment', seg);
+      }
+      return { completed: !this._stopped && !signal?.aborted, spoken: this._spoken.join(' '), segments: segments.length };
+    } finally {
+      this.speaking = false;
+    }
+  }
+  stop() {
+    this._stopped = true;
+    this._wake?.();
+    return this._spoken.join(' ');
+  }
+}
