@@ -64,13 +64,11 @@ const PLAN = {
   email: () => [['email_inbox', {}]],
   meeting_prep: m => [['meeting_prep', { person: m.entities.people[0], meeting: m.text.match(/\b(investor update|project x sync)\b/i)?.[0], topic: m.text.match(/pricing/i)?.[0] }]],
   recall: m => (m.entities.people[0] ? [['person_context', { name: m.entities.people[0] }]] : [['memory_recall', { query: m.text }]]),
-  learn: m => [['memory_learn', { text: m.text }]],
   followup: m => [['followup_list', { person: m.entities.people[0] }]],
-  reminder: m => [['reminder_add', { text: m.text.replace(/^\s*remind me( to)?\s*/i, ''), person: m.entities.people[0] }]],
   decision: m => [['decision_support', { topic: m.text.match(/pricing/i)?.[0] ?? m.text }]],
   news: () => [['news_feed', {}]],
   email_send: m => {
-    const to = m.entities.people[0];
+    const to = m.text.match(/[^\s@<>,;"']+@[^\s@<>,;"']+\.[^\s@<>,;"']+/)?.[0] ?? m.entities.people[0];
     const saying = m.text.match(/\b(?:saying|that|to say)\s+(.+)$/i)?.[1];
     return [['email_send', { to: to ?? 'unknown', subject: saying ? saying.slice(0, 60) : 'Follow-up', body: saying ?? '' }]];
   },
@@ -150,6 +148,7 @@ export class ScriptedModel {
     if (signal?.aborted) throw abortError();
     const last = messages[messages.length - 1];
     if (last.role === 'user') {
+      if (meta.done) return { text: COMPOSE[meta.done.tool]?.(meta.done.result) ?? 'Done.', toolCalls: [] };
       const plan = PLAN[meta.intent]?.({ text: last.content, entities: meta.entities ?? { people: [] }, offer: meta.offer });
       if (plan?.length) return { text: '', toolCalls: plan.map(([name, args], i) => ({ id: `tc_${messages.length}_${i}`, name, args })) };
       return { text: this.smalltalk(meta), toolCalls: [] };
@@ -159,7 +158,7 @@ export class ScriptedModel {
     for (const r of last.results) {
       const o = r.output;
       if (o?.status === 'awaiting_confirmation') {
-        parts.push(`I have prepared this: ${o.confirmation.summary}. It has not been sent. Shall I go ahead?`);
+        parts.push(`I have prepared this: ${o.confirmation.summary}. ${r.name === 'email_send' ? 'It has not been sent.' : 'It has not been saved.'} Shall I go ahead?`);
       } else if (o?.error) parts.push(`I could not do that: ${o.error}.`);
       else if (COMPOSE[r.name]) parts.push(COMPOSE[r.name](o.result ?? o));
       else if (r.name === 'email_send') parts.push(`Sent to ${o.result?.toName}.`);

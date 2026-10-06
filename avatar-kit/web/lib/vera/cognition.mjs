@@ -22,15 +22,39 @@ const RULES = [
   ['greeting', /^\s*(hi|hello|hey|good (morning|afternoon|evening))\b/i],
 ];
 
+// ---- confirmation grammar ---------------------------------------------------------------------------------
+// A confirmation must be the WHOLE utterance. Anything with extra content (a question, a negation, a change,
+// a hedge) is NOT a confirmation. No prefix matching.
+const POLITE = '(?:[,.!\\s]+(?:please|thanks|thank you|go ahead|send it|do it|por favor|obrigado))*';
+const YES_RE = new RegExp('^(?:yes|yeah|yep|yup|sure|ok|okay|confirm|confirmed|go ahead|do it|send it|please do|sim|pode enviar|pode)' + POLITE + '[.!\\s]*$', 'i');
+const NO_WORD = "(?:no|nope|cancel(?: it)?|don'?t send(?: it)?|do not send(?: it)?|don'?t|do not|hold off|never mind|nevermind|stop|n[aã]o)";
+const NO_RE = new RegExp('^' + NO_WORD + '(?:[,.!\\s]+(?:' + NO_WORD + '|please|thanks|thank you|por favor))*[.!\\s]*$', 'i');
+// starts like an answer to the question, but is not a plain yes/no: needs clarification, never action
+const HEDGE_RE = /^(?:yes|yeah|yep|yup|sure|ok|okay|sim|pode|no|nope|n[aã]o|actually|wait|hold on|hang on|but|however|although|well|hmm)\b/i;
+
+/** @returns {'confirm'|'decline'|'ambiguous'|'other'} how an utterance relates to a pending yes/no question */
+export function parseConfirmation(text) {
+  const t = String(text ?? '').trim().replace(/\s+/g, ' ');
+  if (!t) return 'other';
+  if (YES_RE.test(t)) return 'confirm';
+  if (NO_RE.test(t)) return 'decline';
+  if (HEDGE_RE.test(t)) return 'ambiguous';
+  return 'other';
+}
+
 export function classifyIntent(text, { memory, pending } = {}) {
   const t = String(text ?? '').trim();
-  const yes = /^\s*(yes|yep|yeah|sure|please do|go ahead|do it|confirm|confirmed|send it|ok(ay)?|sim|pode)\b/i.test(t);
-  const no = /^\s*(no|nope|cancel|don'?t|do not|hold off|never mind|stop|não|nao)\b/i.test(t);
   const entities = { people: memory ? memory.peopleIn(t).map(p => p.name) : [], projects: memory ? memory.projectsIn(t).map(p => p.name) : [] };
-  if (pending?.confirmation && yes) return { intent: 'confirm', entities };
-  if (pending?.confirmation && no) return { intent: 'decline', entities };
-  if (pending?.offer && yes) return { intent: 'accept_offer', entities };
-  if (pending?.offer && no) return { intent: 'decline_offer', entities };
+  const c = parseConfirmation(t);
+  if (pending?.confirmation) {
+    if (c === 'confirm') return { intent: 'confirm', entities };
+    if (c === 'decline') return { intent: 'decline', entities };
+    if (c === 'ambiguous') return { intent: 'confirm_ambiguous', entities };
+  }
+  if (pending?.offer) {
+    if (c === 'confirm') return { intent: 'accept_offer', entities };
+    if (c === 'decline') return { intent: 'decline_offer', entities };
+  }
   for (const [intent, re] of RULES) if (re.test(t)) return { intent, entities };
   return { intent: 'general', entities };
 }

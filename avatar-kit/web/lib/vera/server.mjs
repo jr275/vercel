@@ -1,5 +1,6 @@
 // Server-side singleton for the Next API route (single process, in-memory; state resets on restart).
 import { createVera } from './create.mjs';
+import { createSessionStore } from './sessions.mjs';
 import { seedProviders, CARLOS_EMAIL } from './scenario.mjs';
 
 let n = 0;
@@ -13,17 +14,16 @@ export const PRESETS = {
 function build() {
   return createVera({ providers: seedProviders({ carlosEmail: true }), env: process.env });
 }
-export function getVera() {
+export function getStore() {
   const g = globalThis;
-  g.__vera ??= build();
-  return g.__vera;
+  g.__veraSessions ??= createSessionStore({ factory: build });
+  return g.__veraSessions;
 }
-export function resetVera() {
-  globalThis.__vera = build();
-  return globalThis.__vera;
-}
+/** Event injection is a simulation tool: off in production unless VERA_SIMULATION=1. */
+export const simulationEnabled = () => process.env.NODE_ENV !== 'production' || process.env.VERA_SIMULATION === '1';
 
-export function snapshot(v) {
+export async function snapshot(v) {
+  const sent = v.email.sent ? await v.email.sent({}) : [];
   const mem = v.memory.toJSON();
   return {
     model: { id: v.model.id, live: !!v.model.live },
@@ -36,7 +36,8 @@ export function snapshot(v) {
     tools: v.registry.definitions().map(t => ({ name: t.name, consequential: t.consequential })),
     toolCalls: v.registry.calls.slice(-12).map(c => ({ name: c.name, args: c.args, status: c.status ?? (c.ok ? 'done' : c.error) })),
     audit: v.gate.audit.slice(-10),
-    outbox: v.email.outbox.map(o => ({ to: o.toName ?? o.to, subject: o.subject })),
+    outbox: sent.map(o => ({ to: o.toName ?? o.to, subject: o.subject })),
+    capabilities: { email: v.email.capabilities, calendar: v.calendar.capabilities },
     briefing: (b => b && { signals: b.notifications.length, items: b.items.map(i => ({ n: i.n, label: i.label, classification: i.classification, importance: +i.importance.toFixed(2) })), also: b.also, signalRows: b.notifications.map(n => ({ kind: n.kind, title: n.signal.title, classification: n.classification, decision: n.decision, importance: n.importance })) })(v.executive.lastBriefing()),
     alerts: v.executive.alerts.slice(-8).map(a => ({ id: a.id, classification: a.classification, decision: a.decision, who: a.signal.who, title: a.signal.title, importance: a.importance })),
   };

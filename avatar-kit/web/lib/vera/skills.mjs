@@ -65,24 +65,45 @@ export function registerSkills({ registry, memory, calendar, email, news, execut
         const connected = ctx.flatMap(c => [...c.decisions.map(d => d.topic), ...c.issues.map(i => i.text)]);
         return { id: m.id, from: sig.sender, known: sig.senderKnown, subject: m.subject, summary: `${m.subject}. ${firstSentence(m.body)}`, urgent: sig.urgency.level >= 0.6, topics: sig.topics, connected, relevant: sig.senderKnown || connected.length > 0, read: !!m.read };
       });
-      const sent = email.outbox ?? [];
+      const sent = email.sent ? await email.sent({ since: now() - 7 * DAY }) : [];
       const unanswered = msgs.filter(m => /\?|please|can you|need/i.test(m.body ?? '') && !sent.some(o => norm(o.to ?? '') && norm(m.from).includes(norm(o.to)))).map(m => ({ id: m.id, from: m.from.replace(/<.*>/, '').trim(), subject: m.subject, ageDays: Math.floor((now() - m.at) / DAY) }));
       return { total: rows.length, relevant: rows.filter(r => r.relevant), ignored: rows.filter(r => !r.relevant).length, unanswered };
     },
   });
-  tool('email', {
-    name: 'email_send',
-    description: 'Send an email. CONSEQUENTIAL: requires explicit user confirmation before it is sent.',
-    consequential: true,
-    input_schema: { type: 'object', properties: { to: str, subject: str, body: str }, required: ['to'] },
-    describe: a => `Send an email to ${a.to}${a.subject ? ` — "${a.subject}"` : ''}`,
-    async run(a) {
-      const p = personOf(a.to);
-      const r = await email.send({ to: p?.email ?? a.to, toName: p?.name ?? a.to, subject: a.subject ?? '(no subject)', body: a.body ?? '', sentAt: now() });
-      if (p) memory.recordInteraction({ person: p.id, at: now(), kind: 'email', summary: `emailed: ${a.subject ?? 'message'}` });
-      return { sent: true, id: r.id, to: p?.email ?? a.to, toName: p?.name ?? a.to };
-    },
-  });
+  // Recipient authority: a known contact (with an address) OR an address the user typed themselves.
+  const ADDR = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
+  const resolveRecipient = (to, ctx) => {
+    const raw = String(to ?? '').trim();
+    const p = ADDR.test(raw) ? memory.people().find(x => x.email && norm(x.email) === norm(raw)) : personOf(raw);
+    if (p?.email) return { name: p.name, address: p.email, known: true };
+    if (ADDR.test(raw) && (ctx?.userAddresses ?? []).some(a => norm(a) === norm(raw))) return { name: raw, address: raw, known: false, userSupplied: true };
+    return null;
+  };
+  if (email.capabilities?.includes('send')) {
+    tool('email', {
+      name: 'email_send',
+      description: 'Send an email. CONSEQUENTIAL: requires explicit user confirmation before it is sent. The recipient must be a known contact or an address the user typed.',
+      consequential: true,
+      input_schema: { type: 'object', properties: { to: str, subject: str, body: str }, required: ['to', 'subject', 'body'] },
+      validate: (a, ctx) => (resolveRecipient(a.to, ctx) ? null : `recipient_not_authorized: "${a.to}" is not a known contact and was not supplied by the user. Ask the user for the address.`),
+      preview: (a, ctx) => {
+        const r = resolveRecipient(a.to, ctx);
+        return { recipient: { name: r.name, address: r.address, known: r.known }, subject: a.subject ?? '(no subject)', body: a.body ?? '' };
+      },
+      describe: (a, ctx) => {
+        const r = resolveRecipient(a.to, ctx);
+        return `Send an email to ${r.name} <${r.address}>${r.known ? '' : ' (address you provided)'}. Subject: "${a.subject ?? '(no subject)'}". Body: "${a.body ?? ''}"`;
+      },
+      async run(a, ctx) {
+        const r = resolveRecipient(a.to, ctx);
+        if (!r) throw new Error('recipient_not_authorized');
+        const sent = await email.send({ to: r.address, toName: r.name, subject: a.subject ?? '(no subject)', body: a.body ?? '', sentAt: now() });
+        const p = r.known ? personOf(r.address) : null;
+        if (p) memory.recordInteraction({ person: p.id, at: now(), kind: 'email', summary: `emailed: ${a.subject ?? 'message'}` });
+        return { sent: true, id: sent.id, to: r.address, toName: r.name };
+      },
+    });
+  }
 
   // ---- People / Personal context / Company ------------------------------------------------------
   tool('people', {
@@ -109,8 +130,9 @@ export function registerSkills({ registry, memory, calendar, email, news, execut
     name: 'memory_learn',
     description: 'Store a fact or preference the user has just told you.',
     input_schema: { type: 'object', properties: { text: str }, required: ['text'] },
-    async run({ text }) {
-      return memory.learn(text.replace(/^\s*(please\s+)?(remember|note|keep in mind|make a note)(\s+that)?\s*/i, ''));
+    async run({ text }, ctx = {}) {
+      // provenance follows who is asking: only the user's own words are 'user'; a model-originated write stays 'model'
+      return memory.learn(text.replace(/^\s*(please\s+)?(remember|note|keep in mind|make a note)(\s+that)?\s*/i, ''), { source: ctx.origin === 'user' ? 'user' : 'model' });
     },
   });
   tool('company', {
@@ -159,11 +181,14 @@ export function registerSkills({ registry, memory, calendar, email, news, execut
   });
   tool('reminder', {
     name: 'reminder_add',
-    description: 'Create a reminder (an open commitment owned by the user).',
+    description: 'PROPOSE a reminder (an open commitment owned by the user). Unless the user asked for it in their own words, it is only a proposal and needs the user\u2019s confirmation.',
+    gateModelOrigin: true,
+    describe: a => `Add a reminder: "${a.text}"${a.dueAt ? ` (due ${new Date(a.dueAt).toISOString().slice(0, 16).replace('T', ' ')} UTC)` : ''}${a.person ? ` regarding ${a.person}` : ''}`,
+    preview: a => ({ reminder: a.text, dueAt: a.dueAt ?? null, person: a.person ?? null }),
     input_schema: { type: 'object', properties: { text: str, dueAt: { type: 'number' }, person: str }, required: ['text'] },
-    async run({ text, dueAt = null, person }) {
+    async run({ text, dueAt = null, person }, ctx = {}) {
       const p = personOf(person);
-      return memory.addCommitment({ text, dueAt, toPerson: p?.id ?? null });
+      return memory.addCommitment({ text, dueAt, toPerson: p?.id ?? null, source: ctx.origin === 'user' ? 'user' : ctx.confirmed ? 'model_proposed_user_confirmed' : 'model' });
     },
   });
   tool('decision_support', {

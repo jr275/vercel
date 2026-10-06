@@ -15,7 +15,7 @@ mkdirSync(OUT, { recursive: true });
 const PORT = process.env.PORT || '3107';
 const base = `http://localhost:${PORT}`;
 
-const server = spawn(process.execPath, [join(here, '..', 'node_modules', 'next', 'dist', 'bin', 'next'), 'start', '-p', PORT], { cwd: join(here, '..'), stdio: 'ignore' });
+const server = spawn(process.execPath, [join(here, '..', 'node_modules', 'next', 'dist', 'bin', 'next'), 'start', '-p', PORT], { cwd: join(here, '..'), stdio: 'ignore', env: { ...process.env, VERA_SIMULATION: '1' } });
 const stop = () => server.kill();
 process.on('exit', stop);
 for (let i = 0; i < 60; i++) { try { if ((await fetch(base)).ok) break; } catch {} await new Promise(r => setTimeout(r, 500)); }
@@ -201,6 +201,28 @@ await step('?review=executive: briefing, proactive alert with trace, memory, too
   assert.deepEqual(rv.errors, []);
 });
 await rv.close();
+
+await step('session isolation over HTTP: browser A cannot confirm, read or reset browser B; bad Origin and raw events are refused', async () => {
+  const A = await browser.newContext(), B = await browser.newContext();
+  const post = (c, body, headers = {}) => c.request.post(base + '/api/vera', { data: body, headers });
+  const state = async c => (await (await c.request.get(base + '/api/vera')).json()).state;
+  await post(A, { action: 'reset' });
+  await post(B, { action: 'reset' });
+  const a1 = await (await post(A, { action: 'say', text: 'email Carlos saying hello' })).json();
+  assert.equal(a1.reply.pending.confirmation.preview.body, 'hello');
+  const b1 = await (await post(B, { action: 'say', text: 'yes' })).json();
+  assert.notEqual(b1.reply.intent, 'confirm');
+  assert.equal((await state(A)).pending.gate.length, 1);
+  assert.equal((await state(B)).pending.gate.length, 0);
+  assert.deepEqual((await state(B)).outbox, []);
+  await post(B, { action: 'reset' });
+  assert.equal((await state(A)).pending.gate.length, 1, 'B reset did not touch A');
+  assert.equal((await post(A, { action: 'say', text: 'hi' }, { origin: 'https://evil.example' })).status(), 403);
+  assert.equal((await post(A, { action: 'event', raw: { kind: 'email', id: 'x', from: 'a@b.c', subject: 's', body: 'b' } })).status(), 400);
+  const cookie = (await A.cookies(base + '/api/vera')).find(c => c.name === 'vera_sid');
+  assert.ok(cookie.httpOnly && cookie.sameSite === 'Strict');
+  await A.close(); await B.close();
+});
 
 const m = await open(390, 844);
 await step('mobile 390 px: no horizontal overflow, the bar sits inside the screen, no errors', async () => {

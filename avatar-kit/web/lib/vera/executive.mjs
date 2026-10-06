@@ -21,11 +21,15 @@ export function createExecutive({ memory, calendar, email, news, now = () => Dat
   }
 
   let last = null;
+  /**
+   * COMPUTE a briefing from the current state. Read-only: it publishes nothing, enqueues no alerts, fires no
+   * listeners and does not touch the pipeline's dedupe state, so it is idempotent and safe for a model to call.
+   * (Publishing an alert is `ingest()`, which is only driven by events arriving.)
+   */
   async function briefing() {
-    pipeline.reset();
     const events = await gatherEvents({ memory, calendar, email, news, now });
     const runs = [];
-    for (const e of events) runs.push(await ingest(e));
+    for (const e of events) runs.push(await pipeline.process(e, { dedupe: false }));
     const notifications = runs.map(r => r.notification).filter(Boolean);
     const next = (await calendar.list({ from: now(), to: now() + DAY }))[0] ?? null;
     return (last = { ...synthesize(notifications, { now: now(), firstMeeting: next }), traces: runs.map(r => ({ status: r.status, trace: r.trace })), notifications });

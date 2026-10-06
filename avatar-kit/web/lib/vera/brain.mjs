@@ -2,18 +2,23 @@
 //   classify intent -> cognitive state -> recall memory -> model <-> tools loop -> reply.
 // It knows nothing about voice or the avatar. Cancellation: pass an AbortSignal; an aborted turn leaves
 // memory, gate and history untouched except for recording that the turn was cancelled.
-import { classifyIntent, createCognition } from './cognition.mjs';
+import { classifyIntent, createCognition, parseConfirmation } from './cognition.mjs';
 import { buildSystemPrompt } from './persona.mjs';
 import { alertText } from './synthesis.mjs';
 import { throwIfAborted, isAbort } from './util.mjs';
 
 const MAX_STEPS = 4;
+const ADDR_RE = /[^\s@<>,;"']+@[^\s@<>,;"']+\.[^\s@<>,;"']+/g;
+const CLARIFY = 'I have not done anything yet. To go ahead, say just "yes". To cancel, say "no".';
+const EXPIRED = 'That request expired, so nothing was sent. Ask me again if you still want it.';
 
 export function createBrain({ memory, registry, gate, executive, model, skills = [], now = () => Date.now() }) {
   const cognition = createCognition({ now });
   const history = []; // { role:'user'|'assistant', content, interrupted?, spoken?, cancelled? }
   let pending = { offer: null, confirmation: null };
 
+  // addresses the USER typed (never tool output, never model output): the only way to reach a non-contact
+  const userAddresses = () => history.filter(h => h.role === 'user' && !h.cancelled).flatMap(h => h.content.match(ADDR_RE) ?? []);
   const syncPending = () => (pending.confirmation = gate.pending().slice(-1)[0] ?? null);
   const modelHistory = () =>
     history
@@ -36,10 +41,19 @@ export function createBrain({ memory, registry, gate, executive, model, skills =
       cognition.set('EXECUTIVE_MEMORY', recalled.map(r => ({ kind: r.kind, text: r.text.slice(0, 80) })));
 
       // --- confirmations are never delegated to the model ---------------------------------------
+      const expired = gate.takeExpired();
+      if (!pending.confirmation && expired.length && parseConfirmation(text) === 'confirm') {
+        cognition.set('EXECUTIVE_ACTION', { status: 'expired', tool: expired[0].tool });
+        return finish(EXPIRED, { intent: 'confirm_expired', toolCalls: [], signal });
+      }
+      if (intent === 'confirm_ambiguous') {
+        cognition.set('EXECUTIVE_ACTION', { status: 'awaiting_confirmation', note: 'ambiguous reply, not confirmed' });
+        return finish(CLARIFY, { intent, toolCalls: [], signal });
+      }
       if (intent === 'confirm') {
         const r = await gate.confirm(pending.confirmation?.id);
         pending.confirmation = null;
-        const reply = r.ok ? `Done. Sent to ${r.result?.toName ?? r.result?.to ?? 'the recipient'}.` : 'There is nothing waiting for confirmation.';
+        const reply = r.ok ? (r.tool === 'email_send' ? `Done. Sent to ${r.result?.toName ?? r.result?.to ?? 'the recipient'}.` : 'Done.') : r.error === 'expired' ? EXPIRED : 'There is nothing waiting for confirmation.';
         cognition.set('EXECUTIVE_ACTION', { status: r.ok ? 'executed' : 'none', tool: r.tool });
         return finish(reply, { intent, toolCalls: r.ok ? [{ name: r.tool, status: 'executed' }] : [], signal });
       }
@@ -53,13 +67,26 @@ export function createBrain({ memory, registry, gate, executive, model, skills =
       if (intent === 'accept_offer' || intent === 'decline_offer') pending.offer = null;
 
       // --- model <-> tools loop --------------------------------------------------------------------
-      const system = buildSystemPrompt({ cognitive: cognition.snapshot(), now: now(), skills });
-      const messages = [...modelHistory().slice(0, -1), { role: 'user', content: text }];
       const toolCalls = [];
+      // The user's own words are the only source of 'user' authority. These two writes are performed by code from
+      // the user's literal utterance (origin:'user'); the model is told they happened and cannot repeat them.
+      let direct = null;
+      if (intent === 'learn') direct = { tool: 'memory_learn', args: { text } };
+      else if (intent === 'reminder') direct = { tool: 'reminder_add', args: { text: text.replace(/^\s*remind me( to)?\s*/i, '').trim(), person: entities.people[0] } };
+      if (direct) {
+        const r = await registry.call(direct.tool, direct.args, { signal, origin: 'user', userAddresses: userAddresses() });
+        throwIfAborted(signal);
+        toolCalls.push({ name: direct.tool, args: direct.args, status: r.status ?? (r.ok ? 'done' : 'error'), origin: 'user' });
+        direct.result = r.result;
+        cognition.set('EXECUTIVE_ACTION', { status: r.status ?? 'error', tool: direct.tool, provenance: 'user' });
+      }
+      const system = buildSystemPrompt({ cognitive: cognition.snapshot(), now: now(), skills }) + (direct ? `\nThe user's request was already carried out and stored (${direct.tool}). Acknowledge it briefly; do not call that tool again.` : '');
+      const messages = [...modelHistory().slice(0, -1), { role: 'user', content: text }];
+      const offered = registry.definitions().filter(t => !direct || t.name !== direct.tool);
       let reply = '';
       for (let step = 0; step < MAX_STEPS; step++) {
         throwIfAborted(signal);
-        const out = await model.complete({ system, messages, tools: registry.definitions(), signal, meta: { intent, entities, offer, text } });
+        const out = await model.complete({ system, messages, tools: offered, signal, meta: { intent, entities, offer, text, done: direct ? { tool: direct.tool, result: direct.result } : null } });
         throwIfAborted(signal);
         if (!out.toolCalls?.length) {
           reply = out.text;
@@ -68,7 +95,8 @@ export function createBrain({ memory, registry, gate, executive, model, skills =
         messages.push({ role: 'assistant', content: out.text, toolCalls: out.toolCalls });
         const results = [];
         for (const c of out.toolCalls) {
-          const r = await registry.call(c.name, c.args, { signal });
+          // the model may only use the tools it was offered this turn
+          const r = !offered.some(t => t.name === c.name) ? { ok: false, error: `tool_not_available:${c.name}` } : await registry.call(c.name, c.args, { signal, origin: 'model', userAddresses: userAddresses() });
           throwIfAborted(signal);
           toolCalls.push({ name: c.name, args: c.args, status: r.status ?? (r.ok ? 'done' : 'error') });
           const output = { ok: r.ok, status: r.status, error: r.error, result: r.result, confirmation: r.confirmation };
@@ -110,8 +138,10 @@ export function createBrain({ memory, registry, gate, executive, model, skills =
     },
     /** The user cut Vera off: remember only what was actually said aloud. */
     noteInterrupted(spoken) {
+      // accept only a prefix of what she actually said: a client cannot rewrite the history with arbitrary text
       const last = [...history].reverse().find(h => h.role === 'assistant');
-      if (last) Object.assign(last, { interrupted: true, spoken: spoken ?? '' });
+      const n = s => String(s ?? '').replace(/\s+/g, ' ').trim();
+      if (last && n(last.content).startsWith(n(spoken))) Object.assign(last, { interrupted: true, spoken: n(spoken) });
     },
     pending: () => ({ ...pending }),
     history: () => history.map(h => ({ ...h })),

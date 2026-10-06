@@ -4,12 +4,16 @@ import { createExecutive } from './executive.mjs';
 import { registerSkills } from './skills.mjs';
 import { createBrain } from './brain.mjs';
 import { createModel } from './models.mjs';
+import { assertProvider } from './providers.mjs';
 import { seedMemory, seedProviders, NOW } from './scenario.mjs';
 
 export function createVera({ memory, providers, model, now, env = {}, fetchImpl } = {}) {
   const clock = now ?? (() => NOW);
   memory ??= seedMemory(clock);
-  const { calendar, email, news } = providers ?? seedProviders();
+  const raw = providers ?? seedProviders();
+  const calendar = assertProvider('calendar', raw.calendar);
+  const email = assertProvider('email', raw.email);
+  const news = assertProvider('news', raw.news);
   const gate = createConfirmationGate({ now: clock });
   const registry = createToolRegistry({ gate });
   const executive = createExecutive({ memory, calendar, email, news, now: clock });

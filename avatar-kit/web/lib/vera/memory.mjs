@@ -4,6 +4,9 @@
 // store interface is the replaceable part (swap for a database without touching callers).
 import { norm, tokens, daysBetween, DAY } from './util.mjs';
 
+/** Provenance of everything written to memory. 'user' = the user said it; 'model' = the model inferred or proposed it; 'system' = seed/ingested data. */
+export const SOURCES = ['user', 'model', 'system'];
+
 export function createMemory({ now = () => Date.now() } = {}) {
   const s = {
     people: [],
@@ -61,7 +64,7 @@ export function createMemory({ now = () => Date.now() } = {}) {
       return d;
     },
     addCommitment(c) {
-      const r = { id: id('cmt'), owner: 'me', toPerson: null, dueAt: null, status: 'open', at: now(), ...c };
+      const r = { id: id('cmt'), owner: 'me', toPerson: null, dueAt: null, status: 'open', at: now(), source: 'system', ...c };
       s.commitments.push(r);
       return r;
     },
@@ -93,12 +96,13 @@ export function createMemory({ now = () => Date.now() } = {}) {
       return r;
     },
     /** Learn a free-form fact from the user. Links it to known people and files preferences. */
-    learn(text, { source = 'user' } = {}) {
+    learn(text, { source = 'system' } = {}) {
+      if (!SOURCES.includes(source)) throw new Error(`memory.learn requires an explicit provenance (${SOURCES.join('|')})`);
       const people = api.peopleIn(text);
       const isPref = /\b(prefer|prefers|likes|dislikes|always|never|hates|loves)\b/i.test(text);
       const rec = { id: id('fact'), text: text.trim(), people: people.map(p => p.id), source, at: now() };
       s.facts.push(rec);
-      if (isPref) api.addPreference(text.trim(), { people: rec.people });
+      if (isPref) api.addPreference(text.trim(), { people: rec.people, source });
       return { ...rec, kind: isPref ? 'preference' : 'fact' };
     },
 
@@ -169,7 +173,7 @@ export function createMemory({ now = () => Date.now() } = {}) {
       const push = (kind, ref, text) => {
         const tk = tokens(text);
         const hit = tk.filter(t => q.has(t));
-        if (hit.length) rows.push({ kind, ref: ref.id, text, score: +(new Set(hit).size / q.size).toFixed(2) });
+        if (hit.length) rows.push({ kind, ref: ref.id, source: ref.source ?? 'system', text, score: +(new Set(hit).size / q.size).toFixed(2) });
       };
       s.people.forEach(p => push('person', p, `${p.name} ${p.role ?? ''} ${p.company ?? ''} ${p.notes.join(' ')}`));
       s.companies.forEach(c => push('company', c, `${c.name} ${c.kind} ${c.notes ?? ''}`));

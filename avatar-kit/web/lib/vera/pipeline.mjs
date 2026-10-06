@@ -28,7 +28,7 @@ export function createPipeline({ memory, calendar, now = () => Date.now(), thres
   }
 
   /** Run one raw event through every stage. Returns the full record, never throws on irrelevance. */
-  async function process(raw) {
+  async function process(raw, { dedupe = true } = {}) {
     const trace = [];
     const step = (stage, detail, data) => trace.push({ stage, detail, ...(data ? { data } : {}) });
     const t0 = now();
@@ -37,11 +37,11 @@ export function createPipeline({ memory, calendar, now = () => Date.now(), thres
     const rid = raw.id ?? `${raw.kind}:${raw.at}:${raw.subject ?? raw.title ?? raw.headline ?? ''}`;
     raw = { ...raw, id: rid, at: raw.at ?? t0 };
     step('EVENT', `${raw.kind} received${raw.subject ? `: "${raw.subject}"` : raw.headline ? `: "${raw.headline}"` : ''}`);
-    if (seen.has(rid)) {
+    if (dedupe && seen.has(rid)) {
       step('INGESTION', 'duplicate, dropped');
       return { status: 'duplicate', trace, notification: null };
     }
-    seen.add(rid);
+    if (dedupe) seen.add(rid);
     step('INGESTION', `accepted from ${raw.source ?? raw.kind}`);
 
     // 2. NORMALIZATION
