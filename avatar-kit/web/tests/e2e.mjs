@@ -39,7 +39,7 @@ const waitState = (p, s, ms = 60000) => p.waitForFunction(x => document.querySel
 const track = p => p.evaluate(() => {
   window.__seen = [];
   const el = document.querySelector('.state-tag');
-  const push = () => window.__seen.push({ s: el.getAttribute('data-state'), speaking: window.__runtime.isSpeaking() });
+  const push = () => { const v = el.getAttribute('data-state'), l = window.__seen[window.__seen.length - 1]; if (!l || l.s !== v) window.__seen.push({ s: v, speaking: window.__runtime.isSpeaking() }); };
   push();
   new MutationObserver(push).observe(el, { attributes: true, attributeFilter: ['data-state'] });
 });
