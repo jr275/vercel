@@ -8,7 +8,7 @@
 import { list, abortError } from './util.mjs';
 
 export class AnthropicModel {
-  constructor({ apiKey, model = 'claude-sonnet-5-5', fetchImpl = globalThis.fetch, baseUrl = 'https://api.anthropic.com', maxTokens = 700, workspaceId } = {}) {
+  constructor({ apiKey, model = 'claude-sonnet-4-5', fetchImpl = globalThis.fetch, baseUrl = 'https://api.anthropic.com', maxTokens = 700, workspaceId } = {}) {
     Object.assign(this, { apiKey, workspaceId: workspaceId || undefined, model, fetchImpl, baseUrl, maxTokens, id: `anthropic:${model}`, live: true });
   }
   available() {
