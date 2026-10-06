@@ -9,7 +9,8 @@
     "build": "npm run sync:avatar && next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "e2e": "node tests/e2e.mjs"
+    "e2e": "node tests/e2e.mjs",
+    "test:vera": "node --test \"tests/vera/*.test.mjs\""
   },
   "dependencies": {
     "next": "^15.1.0",
