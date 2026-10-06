@@ -70,6 +70,7 @@ await step('typing a message: she thinks, speaks, and returns to ready; the tran
   await waitSeen(p, seen => seen.map(x => x.s).join('>').includes('speaking>ready'));
   const order = (await seen(p)).map(x => x.s);
   assert.ok(order.indexOf('thinking') >= 0 && order.indexOf('thinking') < order.indexOf('speaking'), 'thinking comes before speaking: ' + order.join('>'));
+  await p.evaluate(() => document.activeElement?.blur());   // typing a letter in the field must not toggle panels
   await p.keyboard.press('t');
   await p.waitForSelector('.drawer.is-open');
   const lines = await p.locator('.line').allInnerTexts();

@@ -19,6 +19,10 @@ test('state machine: SPEAKING -> INTERRUPTED -> LISTENING, by itself after the h
   c.tick(0.2); assert.equal(c.state, 'INTERRUPTED', 'held for a moment'); c.tick(0.3); c.tick(0.25); assert.equal(c.state, 'LISTENING');
   assert.deepEqual(c.history.slice(-2).map(h => h.to), ['INTERRUPTED', 'LISTENING']);
 });
+test('state machine: an interruption that is already over goes straight to THINKING, and her reply is not dropped', () => {
+  const c = run(new CS(), 'userStart', 'userEnd', 'responseStart'); c.dispatch('userStart'); c.tick(0.25); assert.equal(c.state, 'INTERRUPTED');
+  assert.equal(c.dispatch('userEnd'), true); c.tick(0.25); assert.equal(c.state, 'THINKING'); c.dispatch('responseStart'); c.tick(0.25); assert.equal(c.state, 'SPEAKING');
+});
 test('state machine: events during a transition apply to its target; invalid events are refused and change nothing', () => {
   const c = new CS(), seen = []; c.on('invalid', d => seen.push(d));
   c.dispatch('userStart'); assert.equal(c.dispatch('userEnd'), true, 'LISTENING is the target, so userEnd is valid at once'); c.tick(1); assert.equal(c.state, 'THINKING');

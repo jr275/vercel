@@ -3,6 +3,7 @@
  *
  *   IDLE -> LISTENING -> THINKING -> SPEAKING -> IDLE
  *   SPEAKING -> INTERRUPTED -> LISTENING          (the user talks over her)
+ *   SPEAKING -> INTERRUPTED -> THINKING           (the user interrupts with a short message and is already done)
  *
  * Pure and deterministic: no clock, no DOM. Time only moves when tick(dt) is called, so the same events and ticks always
  * give the same history. Every change goes through a short TRANSITION (`state` reads TRANSITION and `target` says where
@@ -19,7 +20,7 @@
     LISTENING: { userEnd: 'THINKING', responseStart: 'SPEAKING', cancel: 'IDLE' },
     THINKING: { responseStart: 'SPEAKING', userStart: 'LISTENING', cancel: 'IDLE' },
     SPEAKING: { responseEnd: 'IDLE', userStart: 'INTERRUPTED', interrupt: 'INTERRUPTED', cancel: 'IDLE' },
-    INTERRUPTED: { settled: 'LISTENING', userStart: 'LISTENING', cancel: 'IDLE' },
+    INTERRUPTED: { settled: 'LISTENING', userStart: 'LISTENING', userEnd: 'THINKING', cancel: 'IDLE' },
     ERROR: { userStart: 'LISTENING' }
   };
   var ANYWHERE = { error: 'ERROR', reset: 'IDLE' };
