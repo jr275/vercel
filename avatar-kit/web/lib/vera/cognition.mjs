@@ -11,7 +11,7 @@ const RULES = [
   ['learn', /^\s*(please\s+)?(remember|note|keep in mind|make a note)(\s+that)?\b|\bfyi\b/i],
   ['briefing', /\b(briefing|brief me|morning|what should i know|what do i need to know|catch me up|bring me up to speed)\b/i],
   ['meeting_prep', /\b(prepare|prep|get me ready|ready for)\b.*\b(meeting|call|sync|catch-?up)\b|\b(meeting|call|sync)\b.*\b(prepare|prep)\b|\bprepare\b.*\bwith\b/i],
-  ['email_send', /\b(send|draft|write|compose|reply)\b.*\b(email|mail|message|reply)\b|\b(email|message)\b\s+\w+\s+(saying|that|to say)\b/i],
+  ['email_send', /\b(mande|envie|escreva|redija|responda)\b.*\b(email|e-mail|mensagem)\b|\b(send|draft|write|compose|reply)\b.*\b(email|mail|message|reply)\b|\b(email|message)\b\s+\w+\s+(saying|that|to say)\b/i],
   ['email', /\b(email|emails|inbox|mail|unanswered|unread)\b/i],
   ['reminder', /\bremind me\b/i],
   ['followup', /\b(follow[- ]?ups?|owe|pending|commitments?|unresolved|open items?)\b/i],

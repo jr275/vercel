@@ -6,6 +6,7 @@ import { classifyIntent, createCognition, parseConfirmation } from './cognition.
 import { buildSystemPrompt } from './persona.mjs';
 import { alertText } from './synthesis.mjs';
 import { throwIfAborted, isAbort } from './util.mjs';
+import { auditClaims } from './grounding.mjs';
 
 const MAX_STEPS = 4;
 const ADDR_RE = /[^\s@<>,;"']+@[^\s@<>,;"']+\.[^\s@<>,;"']+/g;
@@ -16,6 +17,8 @@ export function createBrain({ memory, registry, gate, executive, model, skills =
   const cognition = createCognition({ now });
   const history = []; // { role:'user'|'assistant', content, interrupted?, spoken?, cancelled? }
   let pending = { offer: null, confirmation: null };
+  let focus = null; // the event/context/insight the conversation is currently about (system facts with provenance)
+  let turnStart = { audit: 0, calls: 0 };
 
   // addresses the USER typed (never tool output, never model output): the only way to reach a non-contact
   const userAddresses = () => history.filter(h => h.role === 'user' && !h.cancelled).flatMap(h => h.content.match(ADDR_RE) ?? []);
@@ -29,6 +32,7 @@ export function createBrain({ memory, registry, gate, executive, model, skills =
   async function respond(text, { signal } = {}) {
     throwIfAborted(signal);
     syncPending();
+    turnStart = { audit: gate.audit.length, calls: registry.calls.length };
     const turn = { role: 'user', content: text };
     history.push(turn);
     try {
@@ -80,7 +84,7 @@ export function createBrain({ memory, registry, gate, executive, model, skills =
         direct.result = r.result;
         cognition.set('EXECUTIVE_ACTION', { status: r.status ?? 'error', tool: direct.tool, provenance: 'user' });
       }
-      const system = buildSystemPrompt({ cognitive: cognition.snapshot(), now: now(), skills }) + (direct ? `\nThe user's request was already carried out and stored (${direct.tool}). Acknowledge it briefly; do not call that tool again.` : '');
+      const system = buildSystemPrompt({ cognitive: cognition.snapshot(), now: now(), skills, focus }) + (direct ? `\nThe user's request was already carried out and stored (${direct.tool}). Acknowledge it briefly; do not call that tool again.` : '');
       const messages = [...modelHistory().slice(0, -1), { role: 'user', content: text }];
       const offered = registry.definitions().filter(t => !direct || t.name !== direct.tool);
       let reply = '';
@@ -120,9 +124,18 @@ export function createBrain({ memory, registry, gate, executive, model, skills =
     }
   }
 
-  function finish(text, { intent, toolCalls }) {
+  function finish(modelText, { intent, toolCalls }) {
+    // MODEL CLAIM != SYSTEM REALITY: what the system actually did this turn, from the gate and the registry
+    const executed = gate.audit.slice(turnStart.audit).filter(a => a.event === 'execute');
+    const facts = {
+      sent: executed.some(a => a.tool === 'email_send') || registry.calls.slice(turnStart.calls).some(c => c.name === 'email_send' && c.status === 'done'),
+      memoryWritten: registry.calls.slice(turnStart.calls).some(c => c.name === 'memory_learn' && c.status === 'done'),
+      confirmed: gate.audit.slice(turnStart.audit).some(a => a.event === 'confirm'),
+    };
+    const audited = auditClaims(modelText, facts, { pendingDraft: !!gate.pending().length });
+    const text = audited.text;
     history.push({ role: 'assistant', content: text });
-    return { text, intent, toolCalls, cognitive: cognition.snapshot(), pending: { offer: pending.offer, confirmation: pending.confirmation }, model: model.id, live: !!model.live };
+    return { text, claim_audit: { flags: audited.flags, corrected: audited.flags.length > 0, model_text: audited.flags.length ? modelText : undefined }, intent, toolCalls, cognitive: cognition.snapshot(), pending: { offer: pending.offer, confirmation: pending.confirmation }, model: model.id, live: !!model.live };
   }
 
   return {
@@ -136,6 +149,16 @@ export function createBrain({ memory, registry, gate, executive, model, skills =
       cognition.set('EXECUTIVE_ACTION', { status: pending.offer ? 'proposed' : 'none', label: notification.action?.label });
       return { text, notification, pending: { offer: pending.offer, confirmation: pending.confirmation } };
     },
+    /** Proactive executive alert: speak it and make the event/context/insight the focus of the conversation. */
+    announceExecutive({ text, focus: f }) {
+      focus = f;
+      history.push({ role: 'assistant', content: text, proactive: true });
+      pending.offer = null;
+      cognition.set('EXECUTIVE_CONTEXT', { event: f.event.id, people: f.event.entities?.people ?? [] }, 'proactive');
+      cognition.set('EXECUTIVE_ACTION', { status: 'none', note: 'alert raised; any action needs the user' });
+      return { text, focus: f, pending: { offer: null, confirmation: pending.confirmation } };
+    },
+    focus: () => focus,
     /** The user cut Vera off: remember only what was actually said aloud. */
     noteInterrupted(spoken) {
       // accept only a prefix of what she actually said: a client cannot rewrite the history with arbitrary text

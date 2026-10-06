@@ -43,7 +43,7 @@ export class AnthropicModel {
         max_tokens: this.maxTokens,
         system,
         messages: AnthropicModel.toApiMessages(messages),
-        tools: tools.map(({ name, description, input_schema }) => ({ name, description, input_schema })),
+        ...(tools.length ? { tools: tools.map(({ name, description, input_schema }) => ({ name, description, input_schema })) } : {}),
       }),
     });
     if (!res.ok) throw new Error(`Anthropic API ${res.status}: ${(await res.text?.().catch(() => '')) ?? ''}`.slice(0, 300));
