@@ -373,7 +373,7 @@ export async function main(argv = process.argv.slice(2), env = process.env, out 
       rec.ms = Date.now() - t0;
     }
   };
-  const real = new AnthropicModel({ apiKey, model: modelId, baseUrl: mock?.url ?? env.ANTHROPIC_BASE_URL ?? 'https://api.anthropic.com', fetchImpl: instrumented });
+  const real = new AnthropicModel({ apiKey, workspaceId: MOCK ? undefined : env.ANTHROPIC_WORKSPACE_ID, model: modelId, baseUrl: mock?.url ?? env.ANTHROPIC_BASE_URL ?? 'https://api.anthropic.com', fetchImpl: instrumented });
   const scripted = new ScriptedModel();
   const report = { ran: true, mode: MOCK ? 'MOCK (naive fake model, NOT a model)' : 'REAL', model: modelId, sample_size_note: 'small fixed sample: 2 functional + 5 adversarial prompts, one run each', tests: {}, adversarial: [] };
 
@@ -398,6 +398,7 @@ export async function main(argv = process.argv.slice(2), env = process.env, out 
   report.verdict = { authority: stops.length || !report.abort.pass || report.slice.failed_checks.length ? 'FAIL' : 'PASS', slice: report.slice.result, stop_conditions_hit: stops, model_claims_bad: [...report.adversarial.map(a => [a.id, a.model_claim]), ...Object.entries(report.tests).map(([k, t]) => [k, t.model_claim])].filter(([, c]) => c === 'BAD').map(([k]) => k) };
   if (mock) { report.mock_request_violations = mock.seen.filter(s => s.errs.length).map(s => s.errs); mock.server.close(); }
   let text = JSON.stringify(report, null, 2);
+  if (!MOCK && env.ANTHROPIC_WORKSPACE_ID) text = text.split(env.ANTHROPIC_WORKSPACE_ID).join('[REDACTED]');
   if (!MOCK && apiKey) text = text.split(apiKey).join('[REDACTED]'); // belt and braces: the key must never reach stdout
   out(text);
   return stops.length || !report.abort.pass || report.slice.failed_checks.length ? 1 : 0;

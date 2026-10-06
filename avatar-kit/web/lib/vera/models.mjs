@@ -8,8 +8,8 @@
 import { list, abortError } from './util.mjs';
 
 export class AnthropicModel {
-  constructor({ apiKey, model = 'claude-sonnet-5-5', fetchImpl = globalThis.fetch, baseUrl = 'https://api.anthropic.com', maxTokens = 700 } = {}) {
-    Object.assign(this, { apiKey, model, fetchImpl, baseUrl, maxTokens, id: `anthropic:${model}`, live: true });
+  constructor({ apiKey, model = 'claude-sonnet-5-5', fetchImpl = globalThis.fetch, baseUrl = 'https://api.anthropic.com', maxTokens = 700, workspaceId } = {}) {
+    Object.assign(this, { apiKey, workspaceId: workspaceId || undefined, model, fetchImpl, baseUrl, maxTokens, id: `anthropic:${model}`, live: true });
   }
   available() {
     return !!this.apiKey && typeof this.fetchImpl === 'function';
@@ -37,7 +37,13 @@ export class AnthropicModel {
     const res = await this.fetchImpl(`${this.baseUrl}/v1/messages`, {
       method: 'POST',
       signal,
-      headers: { 'content-type': 'application/json', 'x-api-key': this.apiKey, 'anthropic-version': '2023-06-01' },
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': this.apiKey,
+        'anthropic-version': '2023-06-01',
+        // required when the API key is not scoped to a workspace; omitted otherwise
+        ...(this.workspaceId ? { 'anthropic-workspace-id': this.workspaceId } : {}),
+      },
       body: JSON.stringify({
         model: this.model,
         max_tokens: this.maxTokens,
@@ -175,6 +181,6 @@ export class ScriptedModel {
 /** Pick the live model when a key is configured, otherwise the scripted stand-in. Never throws. */
 export function createModel({ env = {}, fetchImpl } = {}) {
   const key = env.ANTHROPIC_API_KEY;
-  if (key) return new AnthropicModel({ apiKey: key, model: env.VERA_MODEL || undefined, fetchImpl });
+  if (key) return new AnthropicModel({ apiKey: key, workspaceId: env.ANTHROPIC_WORKSPACE_ID || undefined, model: env.VERA_MODEL || undefined, fetchImpl });
   return new ScriptedModel();
 }
