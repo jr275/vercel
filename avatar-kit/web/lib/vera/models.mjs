@@ -27,6 +27,9 @@ export class AnthropicModel {
         out.push({ role: 'user', content: (m.results ?? []).map(r => ({ type: 'tool_result', tool_use_id: r.id, content: JSON.stringify(r.output) })) });
       }
     }
+    // The Messages API requires the first message to be from the user. A proactive alert can open the history
+    // with an assistant turn, so give it a user turn to answer.
+    if (out[0]?.role === 'assistant') out.unshift({ role: 'user', content: '(session started)' });
     return out;
   }
   async complete({ system, messages, tools = [], signal }) {

@@ -76,3 +76,14 @@ test('API errors surface as errors and aborts are honoured', async () => {
   ac.abort();
   await assert.rejects(bad.complete({ system: '', messages: [], signal: ac.signal }), { name: 'AbortError' });
 });
+
+test('history that opens with a proactive alert is sent with a leading user turn (API requires user first)', async () => {
+  const sent = [];
+  const fetchImpl = async (_u, init) => (sent.push(JSON.parse(init.body).messages), json({ content: [{ type: 'text', text: 'ok' }] }));
+  const v = createVera({ providers: seedProviders({ carlosEmail: false }), model: new AnthropicModel({ apiKey: 'k', fetchImpl }) });
+  const { CARLOS_EMAIL } = await import('../../lib/vera/scenario.mjs');
+  v.brain.announce((await v.executive.ingest(CARLOS_EMAIL)).notification);
+  await v.brain.respond('yes');
+  assert.equal(sent[0][0].role, 'user');
+  assert.deepEqual(sent[0].map(m => m.role), ['user', 'assistant', 'user']);
+});
