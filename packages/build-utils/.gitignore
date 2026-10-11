@@ -1,8 +1,0 @@
-?.js
-dist
-test/symlinks-out
-test/symlinks.zip
-test/utf8-stream-out
-
-lib/python/**/__pycache__
-lib/python/**/*.pyc

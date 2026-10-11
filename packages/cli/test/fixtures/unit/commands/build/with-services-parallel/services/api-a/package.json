@@ -1,8 +1,0 @@
-{
-  "name": "api-a",
-  "version": "0.0.0",
-  "private": true,
-  "dependencies": {
-    "js-shared": "workspace:*"
-  }
-}

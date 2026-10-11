@@ -1,5 +1,0 @@
-.results/
-.venv/
-.vercel/
-build/
-*.egg-info/

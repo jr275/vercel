@@ -1,9 +1,0 @@
-{
-  "compilerOptions": {
-    "outDir": "./dist",
-    "types": ["node", "vitest/globals"],
-    "skipLibCheck": true
-  },
-  "extends": "../../tsconfig.base.json",
-  "include": ["src/**/*", "test/**/*"]
-}

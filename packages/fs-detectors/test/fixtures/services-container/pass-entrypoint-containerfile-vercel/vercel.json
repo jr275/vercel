@@ -1,8 +1,0 @@
-{
-  "experimentalServicesV2": {
-    "app": {
-      "root": ".",
-      "entrypoint": "Containerfile.vercel"
-    }
-  }
-}

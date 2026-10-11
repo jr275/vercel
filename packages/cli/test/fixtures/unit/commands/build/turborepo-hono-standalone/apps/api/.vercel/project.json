@@ -1,9 +1,0 @@
-{
-  "projectId": "prj_turborepo_hono_standalone",
-  "orgId": "team_dummy",
-  "settings": {
-    "framework": "hono",
-    "rootDirectory": null,
-    "nodeVersion": "24.x"
-  }
-}

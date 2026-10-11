@@ -1,4 +1,0 @@
-packages:
-  - 'frontend'
-  - 'services/api-*'
-  - 'libs/js-shared'

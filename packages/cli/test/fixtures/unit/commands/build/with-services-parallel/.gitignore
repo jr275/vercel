@@ -1,6 +1,0 @@
-node_modules
-dist
-.vercel/output
-.vercel/python
-.python-version
-uv.lock

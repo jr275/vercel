@@ -1,5 +1,0 @@
-{
-  "name": "repo-tooling",
-  "private": true,
-  "description": "Repo-root package.json unrelated to the service; the vercel.toml pre-compilation install completes against this one."
-}

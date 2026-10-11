@@ -1,4 +1,0 @@
-[services.web]
-root = "frontend"
-buildCommand = "node build.cjs"
-outputDirectory = "public"
